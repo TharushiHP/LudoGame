@@ -1,0 +1,13 @@
+{
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-17",
+            "path": "C:\\Users\\tharu\\AppData\\Local\\Programs\\Eclipse Adoptium\\jdk-17.0.18.8-hotspot",
+            "default": true
+        }
+    ],
+    "java.jdt.ls.java.home": "C:\\Users\\tharu\\AppData\\Local\\Programs\\Eclipse Adoptium\\jdk-17.0.18.8-hotspot",
+    "java.compile.nullAnalysis.mode": "disabled",
+    "maven.executable.preferMavenWrapper": false,
+    "java.configuration.updateBuildConfiguration": "automatic"
+}
