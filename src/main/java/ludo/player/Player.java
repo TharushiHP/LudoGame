@@ -8,7 +8,9 @@ import ludo.piece.Piece;
 import ludo.player.strategy.MoveStrategy;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
@@ -42,6 +44,18 @@ public abstract class Player {
 
     public Piece choosePiece(List<Piece> allPieces, Board board, int diceValue) {
         return strategy.choosePiece(pieces, allPieces, board, diceValue);
+    }
+
+    /** Rule 7 fallback: asks the strategy again, as if the excluded pieces did not exist. */
+    public Piece choosePiece(List<Piece> allPieces, Board board, int diceValue, Collection<Piece> excluded) {
+        List<Piece> available = pieces.stream()
+                .filter(p -> !excluded.contains(p))
+                .collect(Collectors.toList());
+        return strategy.choosePiece(available, allPieces, board, diceValue);
+    }
+
+    public boolean triesOtherPiecesWhenBlocked() {
+        return strategy.triesOtherPiecesWhenBlocked();
     }
 
     public boolean prefersMoveFromBase(List<Piece> allPieces, Board board) {
@@ -89,14 +103,18 @@ public abstract class Player {
                 .anyMatch(group -> group.size() >= 2);
     }
 
-    public List<Piece> getBlockadePieces() {
+    /** Each block (two or more own pieces on one main-path cell) as its own group. */
+    public List<List<Piece>> getBlocks() {
         return pieces.stream()
                 .filter(Piece::isOnMainPath)
-                .collect(Collectors.groupingBy(Piece::getMainPathPosition))
+                .collect(Collectors.groupingBy(Piece::getMainPathPosition, TreeMap::new, Collectors.toList()))
                 .values().stream()
                 .filter(group -> group.size() >= 2)
-                .flatMap(List::stream)
                 .collect(Collectors.toList());
+    }
+
+    public int countPiecesHome() {
+        return (int) pieces.stream().filter(Piece::isHome).count();
     }
 
     public boolean hasAllPiecesHome() {

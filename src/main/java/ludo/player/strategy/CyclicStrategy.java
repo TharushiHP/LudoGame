@@ -21,7 +21,9 @@ import java.util.stream.Collectors;
  *       waste Blue's turns. The cycle then continues after the chosen piece.</li>
  *   <li>The next piece is on the board but cannot move (exact roll needed for Home,
  *       blocked, or in briefing): it is still chosen and Blue's turn is skipped. Blue
- *       sticks to its cycle rather than switching to another piece.</li>
+ *       sticks to its cycle rather than switching to another piece. This is the one
+ *       exception to the Rule 7 fallback ({@link #triesOtherPiecesWhenBlocked()} is false);
+ *       a blocked piece may still move up to the cell before the block (T-3).</li>
  * </ul>
  */
 public class CyclicStrategy implements MoveStrategy {
@@ -135,5 +137,10 @@ public class CyclicStrategy implements MoveStrategy {
     @Override
     public boolean prefersMoveFromBase(List<Piece> ownPieces, List<Piece> allPieces, Board board) {
         return true;
+    }
+
+    @Override
+    public boolean triesOtherPiecesWhenBlocked() {
+        return false;
     }
 }

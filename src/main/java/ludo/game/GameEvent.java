@@ -13,6 +13,7 @@ public enum GameEvent {
     PIECE_MOVED_TO_START,
     PIECE_MOVED,
     PIECE_BLOCKED,
+    PIECE_CANNOT_MOVE,
     BLOCK_FORMED,
     PIECE_CAPTURED,
     PIECE_REACHED_HOME,
@@ -26,5 +27,6 @@ public enum GameEvent {
     ROUND_STATUS,
     PLAYER_WINS,
     LAST_PLAYER_RANKED,
+    STALEMATE,
     GAME_OVER
 }

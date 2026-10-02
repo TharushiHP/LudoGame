@@ -69,12 +69,58 @@ class GameRulesTest {
         assertTrue(gamesChecked >= SEEDS / 2, "only " + gamesChecked + " games finished normally");
     }
 
-    // Seed 4 ends in a mutual-blockade deadlock (open issue), so it reaches the safety cap.
+    // Every game must end normally or by stalemate; the round cap is only a safety net.
+    @Test
+    void noGameReachesTheSafetyCap() {
+        for (long seed = 1; seed <= SEEDS; seed++) {
+            assertTrue(play(seed).messages.stream().noneMatch(m -> m.startsWith("WARNING")),
+                    "seed " + seed + " reached the round cap");
+        }
+    }
+
+    // A tiny cap forces the safety net to trigger.
     @Test
     void roundCapPrintsWarningAndLeavesUnfinishedPlayersUnranked() {
-        List<String> messages = play(4).messages;
-        assertTrue(messages.stream().anyMatch(m -> m.startsWith("WARNING: the safety limit")));
-        assertTrue(messages.stream().anyMatch(m -> m.startsWith("Not ranked:")));
+        Game game = new GameBuilder().withSeed(1).withMaxRounds(5).build();
+        RecordingListener recorded = listen(game);
+        game.run();
+
+        assertTrue(game.isRoundCapReached());
+        assertTrue(recorded.messages.stream().anyMatch(m -> m.startsWith("WARNING: the safety limit of 5 rounds")));
+        assertTrue(recorded.messages.stream().anyMatch(m -> m.startsWith("Not ranked:")));
+    }
+
+    // Stalemate rule: a tiny threshold forces it to trigger early in a real game.
+    @Test
+    void stalemateEndsTheGameAndRanksEveryRemainingPlayer() {
+        Game game = new GameBuilder().withSeed(1).withStalemateRounds(3).build();
+        RecordingListener recorded = listen(game);
+        game.run();
+
+        assertTrue(recorded.messages.contains("No progress for 3 rounds: the game is declared a stalemate."));
+        assertTrue(recorded.messages.stream().anyMatch(m -> m.startsWith("4th place:")));
+        assertTrue(recorded.messages.stream().noneMatch(m -> m.startsWith("WARNING") || m.startsWith("Not ranked")));
+        assertFalse(game.isRoundCapReached());
+    }
+
+    @Test
+    void stalemateRanksByPiecesHomeThenByCellsLeft() {
+        Game game = new GameBuilder().withSeed(1).build();
+        RecordingListener recorded = listen(game);
+        sendHome(game, ludo.board.PlayerColor.BLUE, 3);
+        sendHome(game, ludo.board.PlayerColor.RED, 2);
+        sendHome(game, ludo.board.PlayerColor.YELLOW, 2);
+        sendHome(game, ludo.board.PlayerColor.GREEN, 1);
+        // Red's third piece is on its home straight, Yellow's pieces are all still at base
+        game.playerOf(ludo.board.PlayerColor.RED).getPieces().get(2).moveToHomePath(3);
+
+        game.declareStalemate();
+
+        assertEquals(1, game.playerOf(ludo.board.PlayerColor.BLUE).getFinishPosition());
+        assertEquals(2, game.playerOf(ludo.board.PlayerColor.RED).getFinishPosition());
+        assertEquals(3, game.playerOf(ludo.board.PlayerColor.YELLOW).getFinishPosition());
+        assertEquals(4, game.playerOf(ludo.board.PlayerColor.GREEN).getFinishPosition());
+        assertTrue(recorded.messages.contains("Red player takes 2nd place (2 pieces Home, 59 cells left)."));
     }
 
     // Observer pattern: each event must carry its own type, not always DICE_ROLLED.
@@ -159,6 +205,18 @@ class GameRulesTest {
     }
 
     // Helpers
+
+    private RecordingListener listen(Game game) {
+        RecordingListener listener = new RecordingListener();
+        game.addObserver(listener);
+        return listener;
+    }
+
+    private void sendHome(Game game, ludo.board.PlayerColor color, int count) {
+        for (int i = 0; i < count; i++) {
+            game.playerOf(color).getPieces().get(i).reachHome();
+        }
+    }
 
     private RecordingListener playWithSeed(long seed) {
         Game game = new GameBuilder().withSeed(seed).build();

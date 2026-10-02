@@ -26,24 +26,36 @@ import java.util.stream.Collectors;
 public class Game {
 
     private static final int MYSTERY_OPTIONS = 6;
-    private static final int MAX_ROUNDS = 500;
+    static final int DEFAULT_MAX_ROUNDS = 500;
+    // 1.5 x the longest no-progress stretch (80 rounds) measured in 100 normal games, seeds 1-100.
+    static final int DEFAULT_STALEMATE_ROUNDS = 120;
 
     private final Board board;
     private final Dice dice;
     private final Coin coin;
     private final List<Player> players;
     private final List<GameEventListener> observers;
+    private final int maxRounds;
+    private final int stalemateRounds;
     private int roundNumber;
     private int turnCount;
+    private int lastProgressRound;
 
     public Game(Board board, Dice dice, Coin coin) {
+        this(board, dice, coin, DEFAULT_MAX_ROUNDS, DEFAULT_STALEMATE_ROUNDS);
+    }
+
+    public Game(Board board, Dice dice, Coin coin, int maxRounds, int stalemateRounds) {
         this.board = board;
         this.dice = dice;
         this.coin = coin;
+        this.maxRounds = maxRounds;
+        this.stalemateRounds = stalemateRounds;
         this.observers = new java.util.ArrayList<>(List.of(GameLogger.getInstance()));
         this.players = buildPlayers();
         this.roundNumber = 0;
         this.turnCount = 0;
+        this.lastProgressRound = 0;
     }
 
     public void addObserver(GameEventListener listener) {
@@ -59,7 +71,25 @@ public class Game {
     }
 
     public boolean isRoundCapReached() {
-        return roundNumber >= MAX_ROUNDS && activePlayers() > 1;
+        return roundNumber >= maxRounds && activePlayers() > 1 && !isStalemate();
+    }
+
+    private boolean isStalemate() {
+        return roundNumber - lastProgressRound >= stalemateRounds;
+    }
+
+    // Package-private hooks so tests can set up a board position and play one roll or turn.
+
+    Player playerOf(PlayerColor color) {
+        return players.stream().filter(p -> p.getColor() == color).findFirst().orElseThrow();
+    }
+
+    MoveResult playRoll(PlayerColor color, int roll) {
+        return processRoll(playerOf(color), players, roll);
+    }
+
+    void playTurn(PlayerColor color) {
+        executeTurn(playerOf(color), players);
     }
 
     private List<Player> buildPlayers() {
@@ -118,8 +148,9 @@ public class Game {
     }
 
     // Rule 11: the game ends as soon as only one player still has pieces to bring home.
+    // Stalemate rule (fills a spec gap): it also ends after stalemateRounds rounds without progress.
     private void mainLoop(List<Player> order) {
-        while (activePlayers() > 1 && roundNumber < MAX_ROUNDS) {
+        while (activePlayers() > 1 && roundNumber < maxRounds && !isStalemate()) {
             roundNumber++;
             publish(GameEvent.ROUND_START, "\n=== Round " + roundNumber + " ===");
             for (Player player : order) {
@@ -140,8 +171,10 @@ public class Game {
         }
         if (activePlayers() <= 1) {
             rankLastPlayer();
+        } else if (isStalemate()) {
+            declareStalemate();
         } else {
-            publish(GameEvent.GAME_OVER, "\nWARNING: the safety limit of " + MAX_ROUNDS
+            publish(GameEvent.GAME_OVER, "\nWARNING: the safety limit of " + maxRounds
                     + " rounds was reached before the game could finish."
                     + " Players with pieces still on the board are not ranked.");
         }
@@ -158,6 +191,41 @@ public class Game {
                             + " player is the only player left and takes "
                             + positionLabel(rank) + " place.");
                 });
+    }
+
+    // Remaining players are ranked by pieces Home (more is better), then by cells left (fewer is better).
+    void declareStalemate() {
+        publish(GameEvent.STALEMATE, "\nNo progress for " + stalemateRounds
+                + " rounds: the game is declared a stalemate.");
+        List<Player> remaining = players.stream()
+                .filter(p -> p.getFinishPosition() == 0)
+                .sorted(Comparator.comparingInt(Player::countPiecesHome).reversed()
+                        .thenComparingInt(this::cellsLeftFor))
+                .collect(Collectors.toList());
+        for (Player p : remaining) {
+            int rank = rankedPlayers() + 1;
+            p.setFinishPosition(rank);
+            publish(GameEvent.STALEMATE, p.getColor().display() + " player takes " + positionLabel(rank)
+                    + " place (" + p.countPiecesHome() + " pieces Home, " + cellsLeftFor(p) + " cells left).");
+        }
+    }
+
+    // An estimate: it ignores the T-7 capture requirement and extra laps for counterclockwise pieces.
+    private int cellsLeftFor(Player player) {
+        return player.getPieces().stream().mapToInt(this::cellsLeft).sum();
+    }
+
+    private int cellsLeft(Piece piece) {
+        int approachToHome = BoardConstants.HOME_STRAIGHT_SIZE + 1;
+        if (piece.isHome())
+            return 0;
+        if (piece.isOnHomeStraight())
+            return BoardConstants.HOME_STRAIGHT_SIZE - piece.getHomePathIndex();
+        if (piece.isOnMainPath())
+            return board.distanceToApproach(piece) + approachToHome;
+        // At base: 1 move out to X, then X to the approach cell, then the home straight.
+        int startToApproach = BoardConstants.YELLOW_APPROACH - BoardConstants.YELLOW_START;
+        return 1 + startToApproach + approachToHome;
     }
 
     private void printFinalStandings() {
@@ -229,28 +297,113 @@ public class Game {
             return activatePieceFromBase(player);
         }
 
+        // Rule 7: if the chosen piece cannot move, ask the strategy again without it.
+        List<Rejection> rejections = new java.util.ArrayList<>();
         Piece chosen = player.choosePiece(all, board, roll);
+        while (chosen != null) {
+            if (chosen.isAtBase()) {
+                if (rolledSix)
+                    return activatePieceFromBase(player);
+            } else {
+                Rejection rejection = checkMove(player, chosen, roll, all);
+                if (rejection == null)
+                    return executeMove(player, chosen, chosen.applyEffect(roll), all);
+                publish(rejection.event(), rejection.reason());
+                rejections.add(rejection);
+            }
+            if (!player.triesOtherPiecesWhenBlocked())
+                break;
+            chosen = player.choosePiece(all, board, roll, unavailablePieces(player, rejections, rolledSix));
+        }
+        return moveUpToBlockOrSkip(player, rejections);
+    }
 
-        if (chosen == null) {
-            publish(GameEvent.TURN_SKIPPED, player.getColor().display() + " has no piece to move. Turn skipped.");
+    /** Why a chosen piece cannot make its full move, and where it could stop instead (T-3), if anywhere. */
+    private record Rejection(GameEvent event, String reason, List<Piece> movers, int stopCell) {}
+
+    private List<Piece> unavailablePieces(Player player, List<Rejection> rejections, boolean rolledSix) {
+        List<Piece> unavailable = new java.util.ArrayList<>();
+        rejections.forEach(r -> unavailable.addAll(r.movers()));
+        for (Piece piece : player.getPieces()) {
+            if (piece.isHome() || (piece.isAtBase() && !rolledSix))
+                unavailable.add(piece);
+        }
+        return unavailable;
+    }
+
+    // Returns null when the piece (or the block it belongs to) can make its full move. No side effects.
+    private Rejection checkMove(Player player, Piece piece, int roll, List<Piece> all) {
+        String name = player.getColor().display() + " piece " + piece.getName();
+        if (piece.isHome())
+            return new Rejection(GameEvent.PIECE_CANNOT_MOVE, name + " is already Home.", List.of(piece), -1);
+        if (hasBriefingEffect(piece))
+            return new Rejection(GameEvent.PIECE_BRIEFING, name + " is in briefing and cannot move.", List.of(piece), -1);
+
+        int steps = piece.applyEffect(roll);
+        if (steps == 0)
+            return new Rejection(GameEvent.PIECE_CANNOT_MOVE, name + " cannot move 0 cells.", List.of(piece), -1);
+
+        List<Piece> block = movingBlock(piece, player.getPieces());
+        if (block.size() < 2)
+            return checkSingleMove(player, piece, steps, all);
+
+        // T-4 first; if the block cannot move, T-5 lets the chosen piece leave it and move alone.
+        Rejection blockRejection = checkBlockMove(player, block, steps, all);
+        if (blockRejection == null)
+            return null;
+        Rejection aloneRejection = checkSingleMove(player, piece, steps, all);
+        if (aloneRejection == null)
+            return null;
+        return blockRejection.stopCell() >= 0 ? blockRejection : aloneRejection;
+    }
+
+    private Rejection checkSingleMove(Player player, Piece piece, int steps, List<Piece> all) {
+        String name = player.getColor().display() + " piece " + piece.getName();
+        MoveTarget target = board.computeMoveTarget(piece, steps);
+        boolean entersHomeStraight = !target.isMainPath() && piece.canEnterHomeStraightOnNextPass();
+        if (target.isOvershoot() && entersHomeStraight)
+            return new Rejection(GameEvent.PIECE_CANNOT_MOVE,
+                    name + " cannot move - exact roll required to reach Home.", List.of(piece), -1);
+        if (entersHomeStraight || !board.pathCrossesBlock(piece, steps, all))
+            return null;
+
+        int landing = board.advance(piece.getMainPathPosition(), steps, piece.getDirection());
+        int blockCell = board.findBlockCell(piece, steps, all);
+        int stopCell = board.findCellBeforeBlock(piece, steps, all);
+        String reason = name + " is blocked from moving from " + piece.getMainPathPosition()
+                + " to " + landing + " by " + describeBlocker(player, blockCell, all) + ".";
+        return new Rejection(GameEvent.PIECE_BLOCKED, reason, List.of(piece),
+                stopCell == piece.getMainPathPosition() ? -1 : stopCell);
+    }
+
+    private String describeBlocker(Player player, int blockCell, List<Piece> all) {
+        return board.opponentPiecesAtCell(player.getColor(), blockCell, all).stream()
+                .findFirst()
+                .map(p -> p.getColor().display() + " piece " + p.getPieceNumber())
+                .orElse("an opponent");
+    }
+
+    // T-3: no other piece can move, so the first blocked piece (or block) moves up to the cell before the block.
+    private MoveResult moveUpToBlockOrSkip(Player player, List<Rejection> rejections) {
+        String colour = player.getColor().display();
+        if (rejections.isEmpty()) {
+            publish(GameEvent.TURN_SKIPPED, colour + " has no movable piece. Turn skipped.");
             return MoveResult.builder().moved(false).build();
         }
-
-        if (chosen.isAtBase()) {
-            if (rolledSix)
-                return activatePieceFromBase(player);
-            publish(GameEvent.TURN_SKIPPED, player.getColor().display() + " has no movable piece. Turn skipped.");
-            return MoveResult.builder().moved(false).build();
+        String noOtherPiece = player.triesOtherPiecesWhenBlocked()
+                ? " does not have other pieces in the board to move instead of the blocked piece."
+                : " keeps to its cycle and does not move another piece instead.";
+        for (Rejection rejection : rejections) {
+            if (rejection.stopCell() >= 0) {
+                rejection.movers().forEach(p -> p.setMainPathPosition(rejection.stopCell()));
+                publish(GameEvent.PIECE_BLOCKED, colour + noOtherPiece + " Moved the piece to square "
+                        + rejection.stopCell() + " which is the cell before the block.");
+                return MoveResult.builder().moved(true).build();
+            }
         }
-
-        if (hasBriefingEffect(chosen)) {
-            publish(GameEvent.PIECE_BRIEFING, player.getColor().display() + " piece " + chosen.getName()
-                    + " is in briefing and cannot move. Turn skipped.");
-            return MoveResult.builder().moved(false).build();
-        }
-
-        int effectiveSteps = chosen.applyEffect(roll);
-        return executeMove(player, chosen, effectiveSteps, all);
+        publish(GameEvent.TURN_SKIPPED, colour + noOtherPiece
+                + " Ignoring the throw and moving on to the next player.");
+        return MoveResult.builder().moved(false).build();
     }
 
     private MoveResult activatePieceFromBase(Player player) {
@@ -273,36 +426,33 @@ public class Game {
         return MoveResult.builder().moved(true).build();
     }
 
+    // Only called after checkMove has confirmed the full move is allowed.
     private MoveResult executeMove(Player player, Piece piece, int steps, List<Piece> all) {
-        List<Piece> blockPeers = sameColorBlockPeers(piece, player.getPieces());
-        if (!blockPeers.isEmpty() && hasMixedDirections(piece, blockPeers)) {
-            return executeMixedBlockMove(player, piece, blockPeers, steps, all);
+        List<Piece> block = movingBlock(piece, player.getPieces());
+        if (block.size() >= 2) {
+            if (checkBlockMove(player, block, steps, all) == null) {
+                return executeBlockMove(player, block, steps, all);
+            }
+            publish(GameEvent.PIECE_MOVED, player.getColor().display() + " block at cell "
+                    + piece.getMainPathPosition() + " cannot move, so piece " + piece.getName()
+                    + " leaves the block and moves " + piece.getDirection().display() + " on its own (Rule T-5).");
         }
 
         MoveTarget target = board.computeMoveTarget(piece, steps);
-
-        if (target.isOvershoot()) {
-            publish(GameEvent.TURN_SKIPPED, player.getColor().display() + " piece " + piece.getName()
-                    + " cannot move - exact roll required to reach Home.");
-            return MoveResult.builder().moved(false).build();
+        if (target.isMainPath()) {
+            return landOnMainPath(player, piece, target.getPosition(), steps, all);
         }
 
-        if (target.isHomeStraight() || target.isHome()) {
-
-            if (piece.getDirection() == Direction.COUNTER_CLOCKWISE) {
-                piece.incrementApproachPassCount();
-            }
-
-            if (!piece.canEnterHomeStraight()) {
-                return bypassApproach(player, piece, steps, all);
-            }
-            if (target.isHome()) {
-                return reachHome(player, piece);
-            }
-            return landOnHomeStraight(player, piece, target.getPosition());
+        if (piece.getDirection() == Direction.COUNTER_CLOCKWISE) {
+            piece.incrementApproachPassCount();
         }
-
-        return landOnMainPath(player, piece, target.getPosition(), steps, all);
+        if (!piece.canEnterHomeStraight()) {
+            return bypassApproach(player, piece, steps, all);
+        }
+        if (target.isHome()) {
+            return reachHome(player, piece);
+        }
+        return landOnHomeStraight(player, piece, target.getPosition());
     }
 
     private MoveResult bypassApproach(Player player, Piece piece, int steps, List<Piece> all) {
@@ -329,39 +479,15 @@ public class Game {
 
     private MoveResult reachHome(Player player, Piece piece) {
         piece.reachHome();
+        recordProgress();
         publish(GameEvent.PIECE_REACHED_HOME, player.getColor().display() + " piece " + piece.getName() + " has reached Home!");
         checkFinish(player);
         return MoveResult.builder().moved(true).reachedHome(true).build();
     }
 
+    // Blocks in the path were already ruled out by checkMove (partial moves: moveUpToBlockOrSkip).
     private MoveResult landOnMainPath(Player player, Piece piece, int targetCell,
             int steps, List<Piece> all) {
-        if (board.pathCrossesBlock(piece, steps, all)) {
-            int blockCell = board.findBlockCell(piece, steps, all);
-            Piece blocker = board.opponentPiecesAtCell(player.getColor(), blockCell, all)
-                    .stream().findFirst().orElse(null);
-            String blockerDesc = blocker == null
-                    ? "an opponent"
-                    : blocker.getColor().display() + " piece " + blocker.getPieceNumber();
-
-            int safeCell = board.findCellBeforeBlock(piece, steps, all);
-            publish(GameEvent.PIECE_BLOCKED, player.getColor().display() + " piece " + piece.getName()
-                    + " is blocked from moving from " + piece.getMainPathPosition()
-                    + " to " + targetCell + " by " + blockerDesc + ".");
-
-            if (safeCell < 0 || safeCell == piece.getMainPathPosition()) {
-                publish(GameEvent.PIECE_BLOCKED, player.getColor().display()
-                        + " does not have other pieces in the board to move instead of the blocked piece."
-                        + " Ignoring the throw and moving on to the next player.");
-                return MoveResult.builder().moved(false).build();
-            }
-            publish(GameEvent.PIECE_BLOCKED, player.getColor().display()
-                    + " does not have other pieces in the board to move instead of the blocked piece."
-                    + " Moved the piece to square " + safeCell + " which is the cell before the block.");
-            piece.setMainPathPosition(safeCell);
-            return MoveResult.builder().moved(true).build();
-        }
-
         if (board.hasFriendlyPieceAt(player.getColor(), targetCell, piece, all)) {
             return formBlock(player, piece, targetCell, steps, all);
         }
@@ -372,12 +498,11 @@ public class Game {
                 + " from location " + fromLabel + " to " + targetCell
                 + " by " + steps + " units in " + piece.getDirection().display() + " direction.");
 
+        // A single piece never lands on an opposing block: checkMove treats that as blocked.
         List<Piece> opponents = board.opponentPiecesAtCell(player.getColor(), targetCell, all);
         boolean captured = false;
         if (opponents.size() == 1) {
             captured = captureOpponent(player, piece, opponents.get(0), targetCell);
-        } else if (opponents.size() >= 2) {
-            captured = captureOpponentBlock(player, piece, opponents, targetCell, all);
         }
 
         if (board.getMysteryCell().isAt(targetCell)) {
@@ -388,51 +513,107 @@ public class Game {
         return MoveResult.builder().moved(true).captured(captured).build();
     }
 
-    private List<Piece> sameColorBlockPeers(Piece piece, List<Piece> ownPieces) {
-        if (!piece.isOnMainPath())
-            return java.util.Collections.emptyList();
-        return ownPieces.stream()
+    /**
+     * T-4: the chosen piece plus every own piece on the same main-path cell (chosen piece first).
+     * A piece on its own approach cell moves on its own, so a block can reach its home straight.
+     */
+    private List<Piece> movingBlock(Piece piece, List<Piece> ownPieces) {
+        List<Piece> block = new java.util.ArrayList<>(List.of(piece));
+        if (!piece.isOnMainPath() || piece.getMainPathPosition() == piece.approachPosition())
+            return block;
+        ownPieces.stream()
                 .filter(p -> p != piece)
                 .filter(Piece::isOnMainPath)
                 .filter(p -> p.getMainPathPosition() == piece.getMainPathPosition())
-                .collect(Collectors.toList());
+                .forEach(block::add);
+        return block;
     }
 
-    private boolean hasMixedDirections(Piece piece, List<Piece> peers) {
-        return peers.stream().anyMatch(p -> p.getDirection() != piece.getDirection());
-    }
-
-    private MoveResult executeMixedBlockMove(Player player, Piece piece,
-            List<Piece> peers, int diceValue, List<Piece> all) {
-        List<Piece> block = new java.util.ArrayList<>();
-        block.add(piece);
-        block.addAll(peers);
-
-        int blockSize = block.size();
-        int stepsEach = diceValue / blockSize;
-        if (stepsEach == 0) {
-            publish(GameEvent.PIECE_BLOCKED, player.getColor().display() + " block at cell " + piece.getMainPathPosition()
-                    + " cannot move — dice value too small for block of size " + blockSize + ".");
-            return MoveResult.builder().moved(false).build();
-        }
-
-        Direction blockDir = block.stream()
+    // T-4: the block follows the piece with the longest distance still to go (first piece on a tie).
+    private Direction blockDirection(List<Piece> block) {
+        return block.stream()
                 .max(Comparator.comparingInt(p -> board.distanceToApproach(p)))
                 .map(Piece::getDirection)
-                .orElse(piece.getDirection());
+                .orElseThrow();
+    }
 
-        int fromCell = piece.getMainPathPosition();
-        int toCell = board.advance(fromCell, stepsEach, blockDir);
+    // Steps each block piece takes: roll / block size, stopping on its own approach cell.
+    private int blockStepsEach(List<Piece> block, int steps, Direction direction) {
+        Piece lead = block.get(0);
+        int toApproach = direction == Direction.CLOCKWISE
+                ? Math.floorMod(lead.approachPosition() - lead.getMainPathPosition(), BoardConstants.MAIN_PATH_SIZE)
+                : Math.floorMod(lead.getMainPathPosition() - lead.approachPosition(), BoardConstants.MAIN_PATH_SIZE);
+        return Math.min(steps / block.size(), toApproach);
+    }
 
-        for (Piece p : block) {
-            p.setDirection(blockDir);
-            p.setMainPathPosition(toCell);
+    // How far the block can go before an opposing block stops it (T-3). It may land on a same-size block (T-8).
+    private int blockFreeSteps(List<Piece> block, int stepsEach, Direction direction, List<Piece> all) {
+        Piece lead = block.get(0);
+        for (int i = 1; i <= stepsEach; i++) {
+            int cell = board.advance(lead.getMainPathPosition(), i, direction);
+            int opponents = board.opponentPiecesAtCell(lead.getColor(), cell, all).size();
+            boolean capturable = i == stepsEach && opponents == block.size();
+            if (opponents >= 2 && !capturable)
+                return i - 1;
         }
+        return stepsEach;
+    }
 
+    private Rejection checkBlockMove(Player player, List<Piece> block, int steps, List<Piece> all) {
+        Piece lead = block.get(0);
+        String blockName = player.getColor().display() + " block at cell " + lead.getMainPathPosition();
+        if (block.stream().anyMatch(this::hasBriefingEffect))
+            return new Rejection(GameEvent.PIECE_BRIEFING,
+                    blockName + " cannot move because one of its pieces is in briefing.", block, -1);
+
+        Direction direction = blockDirection(block);
+        int stepsEach = blockStepsEach(block, steps, direction);
+        if (stepsEach == 0)
+            return new Rejection(GameEvent.PIECE_CANNOT_MOVE, blockName
+                    + " cannot move — dice value too small for block of size " + block.size() + ".", block, -1);
+
+        int freeSteps = blockFreeSteps(block, stepsEach, direction, all);
+        if (freeSteps == stepsEach)
+            return null;
+        int blockCell = board.advance(lead.getMainPathPosition(), freeSteps + 1, direction);
+        String reason = blockName + " is blocked from moving to "
+                + board.advance(lead.getMainPathPosition(), stepsEach, direction)
+                + " by " + describeBlocker(player, blockCell, all) + ".";
+        return new Rejection(GameEvent.PIECE_BLOCKED, reason, block,
+                freeSteps == 0 ? -1 : board.advance(lead.getMainPathPosition(), freeSteps, direction));
+    }
+
+    // T-4 / T-5: the whole block moves; each piece keeps its own direction for when it leaves the block.
+    private MoveResult executeBlockMove(Player player, List<Piece> block, int steps, List<Piece> all) {
+        Direction direction = blockDirection(block);
+        int stepsEach = blockStepsEach(block, steps, direction);
+        int fromCell = block.get(0).getMainPathPosition();
+        int toCell = board.advance(fromCell, stepsEach, direction);
+
+        block.forEach(p -> p.setMainPathPosition(toCell));
         publish(GameEvent.PIECE_MOVED, player.getColor().display() + " block moves from cell " + fromCell
                 + " to cell " + toCell + " by " + stepsEach + " units each in "
-                + blockDir.display() + " direction (Rule T-4).");
-        return MoveResult.builder().moved(true).build();
+                + direction.display() + " direction (Rule T-4).");
+
+        boolean captured = captureWithBlock(player, block, toCell, all);
+        return MoveResult.builder().moved(true).captured(captured).build();
+    }
+
+    // T-8: a block captures a single piece, or an opposing block of the same size; every capturing piece counts it.
+    private boolean captureWithBlock(Player player, List<Piece> block, int cell, List<Piece> all) {
+        List<Piece> captured = board.opponentPiecesAtCell(player.getColor(), cell, all);
+        if (captured.isEmpty())
+            return false;
+        publish(GameEvent.PIECE_CAPTURED, player.getColor().display() + " block lands on square " + cell
+                + " and captures " + captured.size() + " opponent piece(s).");
+        for (Piece target : captured) {
+            target.resetToBase();
+            publish(GameEvent.PIECE_CAPTURED, target.getColor().display() + " piece " + target.getName()
+                    + " returned to base.");
+        }
+        block.forEach(Piece::incrementCaptureCount);
+        recordProgress();
+        return true;
     }
 
     private MoveResult formBlock(Player player, Piece piece, int targetCell, int steps, List<Piece> all) {
@@ -454,26 +635,10 @@ public class Game {
                 + ", and returns it to the base.");
         target.resetToBase();
         capturerPiece.incrementCaptureCount();
+        recordProgress();
         publish(GameEvent.PIECE_CAPTURED, capturer.getColor().display() + " player now has "
                 + capturer.countPiecesOnBoard() + "/4 on pieces on the board and "
                 + capturer.countPiecesAtBase() + "/4 pieces on the base.");
-        return true;
-    }
-
-    private boolean captureOpponentBlock(Player capturer, Piece capturerPiece,
-            List<Piece> opponentBlock, int cell, List<Piece> all) {
-        boolean capturerIsInBlock = board.hasSameColorBlock(
-                capturerPiece.getMainPathPosition(), capturerPiece.getColor(), all);
-        if (!capturerIsInBlock)
-            return false;
-
-        publish(GameEvent.PIECE_CAPTURED, capturer.getColor().display() + " block captures opponent block at cell " + cell + ".");
-        for (Piece target : opponentBlock) {
-            target.resetToBase();
-            capturerPiece.incrementCaptureCount();
-            publish(GameEvent.PIECE_CAPTURED, target.getColor().display() + " piece " + target.getName()
-                    + " returned to base.");
-        }
         return true;
     }
 
@@ -592,16 +757,16 @@ public class Game {
         }
     }
 
-    private void handleTripleSixRule(Player player) {
-        if (!player.hasBlockade())
-            return;
-        List<Piece> block = player.getBlockadePieces();
-        for (int i = 1; i < block.size(); i++) {
-            Piece toDisplace = block.get(i);
-            int newPos = board.advance(toDisplace.getMainPathPosition(), 6, toDisplace.getDirection());
-            toDisplace.setMainPathPosition(newPos);
-            publish(GameEvent.PIECE_MOVED, player.getColor().display() + " blockade broken: piece "
-                    + toDisplace.getName() + " moved to cell " + newPos + ".");
+    // T-6: in every block, all pieces but the first move 6 cells in their own direction (T-5).
+    void handleTripleSixRule(Player player) {
+        for (List<Piece> block : player.getBlocks()) {
+            for (int i = 1; i < block.size(); i++) {
+                Piece toDisplace = block.get(i);
+                int newPos = board.advance(toDisplace.getMainPathPosition(), 6, toDisplace.getDirection());
+                toDisplace.setMainPathPosition(newPos);
+                publish(GameEvent.PIECE_MOVED, player.getColor().display() + " blockade broken: piece "
+                        + toDisplace.getName() + " moved to cell " + newPos + ".");
+            }
         }
     }
 
@@ -646,6 +811,11 @@ public class Game {
 
     private int activePlayers() {
         return (int) players.stream().filter(p -> !p.hasAllPiecesHome()).count();
+    }
+
+    // Progress = a capture or a piece reaching Home; used by the stalemate rule.
+    private void recordProgress() {
+        lastProgressRound = roundNumber;
     }
 
     private int rankedPlayers() {

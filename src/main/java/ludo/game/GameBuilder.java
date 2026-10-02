@@ -14,6 +14,8 @@ import java.util.Random;
 public class GameBuilder {
 
     private RandomSource randomSource;
+    private int maxRounds = Game.DEFAULT_MAX_ROUNDS;
+    private int stalemateRounds = Game.DEFAULT_STALEMATE_ROUNDS;
 
     public GameBuilder withRandomSource(RandomSource source) {
         this.randomSource = source;
@@ -25,12 +27,22 @@ public class GameBuilder {
         return this;
     }
 
+    public GameBuilder withMaxRounds(int rounds) {
+        this.maxRounds = rounds;
+        return this;
+    }
+
+    public GameBuilder withStalemateRounds(int rounds) {
+        this.stalemateRounds = rounds;
+        return this;
+    }
+
     public Game build() {
         RandomSource source = randomSource != null ? randomSource : new JavaRandom();
         Board board = new Board(source);
         Dice dice = new Dice(source);
         Coin coin = new Coin(source);
-        return new Game(board, dice, coin);
+        return new Game(board, dice, coin, maxRounds, stalemateRounds);
     }
 
     private static class JavaRandom implements RandomSource {

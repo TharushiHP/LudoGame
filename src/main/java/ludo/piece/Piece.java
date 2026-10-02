@@ -127,6 +127,18 @@ public class Piece {
         return captureCount >= 1 && approachPassCount >= 2;
     }
 
+    /**
+     * T-7 check made before a move, without side effects: may this piece enter its home
+     * straight the next time it passes its approach cell? Counterclockwise pieces count
+     * that pass as well (the move itself increments the pass count).
+     */
+    public boolean canEnterHomeStraightOnNextPass() {
+        if (direction == Direction.CLOCKWISE) {
+            return captureCount >= 1;
+        }
+        return captureCount >= 1 && approachPassCount + 1 >= 2;
+    }
+
     public PlayerColor getColor()       { return color; }
     public int getPieceNumber()         { return pieceNumber; }
     public PieceLocation getLocation()  { return location; }
