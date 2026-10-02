@@ -3,6 +3,7 @@ package ludo.player;
 import ludo.board.Board;
 import ludo.board.BoardConstants;
 import ludo.board.PlayerColor;
+import ludo.effect.BriefingEffect;
 import ludo.piece.Piece;
 import ludo.player.strategy.MoveStrategy;
 
@@ -10,6 +11,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * A player: owns four pieces and per-player turn state, and delegates the choice of piece
+ * to its {@link MoveStrategy} (Strategy pattern; composition over inheritance).
+ */
 public abstract class Player {
 
     protected final PlayerColor color;
@@ -41,6 +46,27 @@ public abstract class Player {
 
     public boolean prefersMoveFromBase(List<Piece> allPieces, Board board) {
         return strategy.prefersMoveFromBase(pieces, allPieces, board);
+    }
+
+    /**
+     * Rule T-13: records a roll by this player against every piece in briefing, whichever
+     * piece the roll is then used for. Pieces that reach three consecutive 3s go to base.
+     *
+     * @return the pieces sent back to base by this roll (usually empty)
+     */
+    public List<Piece> recordRollForBriefing(int diceValue) {
+        List<Piece> sentToBase = new ArrayList<>();
+        for (Piece piece : pieces) {
+            if (piece.getActiveEffect() instanceof BriefingEffect) {
+                BriefingEffect briefing = (BriefingEffect) piece.getActiveEffect();
+                briefing.recordRoll(diceValue);
+                if (briefing.shouldTeleportToBase()) {
+                    piece.resetToBase();
+                    sentToBase.add(piece);
+                }
+            }
+        }
+        return sentToBase;
     }
 
     public void recordSix() {

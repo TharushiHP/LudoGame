@@ -2,7 +2,15 @@ package ludo.effect;
 
 import ludo.board.BoardConstants;
 
+/**
+ * Briefing effect from the Beta mystery cell: the piece cannot move for four rounds, and
+ * three consecutive rolls of 3 by its player during the briefing send it back to base (T-13).
+ * One of the interchangeable {@link PieceEffect} implementations (Strategy pattern, OCP).
+ */
 public class BriefingEffect implements PieceEffect {
+
+    private static final int TELEPORT_ROLL = 3;
+    private static final int CONSECUTIVE_ROLLS_TO_TELEPORT = 3;
 
     private int roundsRemaining;
     private int consecutiveThrees;
@@ -35,7 +43,7 @@ public class BriefingEffect implements PieceEffect {
     }
 
     public void recordRoll(int diceValue) {
-        if (diceValue == 3) {
+        if (diceValue == TELEPORT_ROLL) {
             consecutiveThrees++;
         } else {
             consecutiveThrees = 0;
@@ -43,7 +51,7 @@ public class BriefingEffect implements PieceEffect {
     }
 
     public boolean shouldTeleportToBase() {
-        return consecutiveThrees >= 2;
+        return consecutiveThrees >= CONSECUTIVE_ROLLS_TO_TELEPORT;
     }
 
     public int getRoundsRemaining() {

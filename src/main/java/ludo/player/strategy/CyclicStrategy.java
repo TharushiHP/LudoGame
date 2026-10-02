@@ -9,6 +9,21 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+ * Blue's behaviour: moves its pieces in turn (B1, B2, B3, B4, B1, ...), aiming for the mystery
+ * cell when moving counterclockwise and avoiding it when moving clockwise.
+ * A {@link MoveStrategy} implementation (Strategy pattern).
+ * <p>
+ * Two cases where the cycle's next piece is not a normal move:
+ * <ul>
+ *   <li>The next piece is Home (or still at base): it is skipped, and the next piece in
+ *       cycle order that is on the board is chosen instead, so finished pieces do not
+ *       waste Blue's turns. The cycle then continues after the chosen piece.</li>
+ *   <li>The next piece is on the board but cannot move (exact roll needed for Home,
+ *       blocked, or in briefing): it is still chosen and Blue's turn is skipped. Blue
+ *       sticks to its cycle rather than switching to another piece.</li>
+ * </ul>
+ */
 public class CyclicStrategy implements MoveStrategy {
 
     private final PlayerColor color;
@@ -35,12 +50,7 @@ public class CyclicStrategy implements MoveStrategy {
             return null;
         }
 
-        Piece candidate = ownPieces.get(cycleIndex % ownPieces.size());
-        advanceCycle(ownPieces.size());
-
-        if (!candidate.isActive()) {
-            candidate = movable.get(0);
-        }
+        Piece candidate = nextPieceOnBoardInCycle(ownPieces);
 
         if (candidate.isOnMainPath()) {
             return applyMysteryPreference(candidate, movable, board, diceValue);
@@ -108,8 +118,18 @@ public class CyclicStrategy implements MoveStrategy {
                 .orElse(candidate);
     }
 
-    private void advanceCycle(int size) {
-        cycleIndex = (cycleIndex + 1) % size;
+    // Skips pieces that are Home or at base; caller guarantees at least one piece is on the board.
+    private Piece nextPieceOnBoardInCycle(List<Piece> ownPieces) {
+        int size = ownPieces.size();
+        for (int offset = 0; offset < size; offset++) {
+            int index = (cycleIndex + offset) % size;
+            Piece piece = ownPieces.get(index);
+            if (piece.isActive()) {
+                cycleIndex = (index + 1) % size;
+                return piece;
+            }
+        }
+        throw new IllegalStateException("No Blue piece on the board");
     }
 
     @Override

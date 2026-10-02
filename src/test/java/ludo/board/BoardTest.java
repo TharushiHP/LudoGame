@@ -70,8 +70,9 @@ class BoardTest {
 
     @Test
     void exactStepsToHomeFromApproachReachesHome() {
+        // 5 home-straight cells, then Home: 6 steps from the approach cell
         Piece p = yellowPieceAt(BoardConstants.YELLOW_APPROACH);
-        MoveTarget target = board.computeMoveTarget(p, BoardConstants.HOME_STRAIGHT_SIZE);
+        MoveTarget target = board.computeMoveTarget(p, BoardConstants.HOME_STRAIGHT_SIZE + 1);
         assertTrue(target.isHome());
     }
 
@@ -163,6 +164,32 @@ class BoardTest {
         Piece p = yellowPieceAt(40);
         int expected = (BoardConstants.YELLOW_APPROACH - 40 + 52) % 52;
         assertEquals(expected, board.distanceToApproach(p));
+    }
+
+    // Rule 10: approach -> homepath0..homepath4 (5 cells) -> Home, exact roll only.
+    @Test
+    void homeStraightHasFiveCellsFromApproach() {
+        for (int steps = 1; steps <= BoardConstants.HOME_STRAIGHT_SIZE; steps++) {
+            MoveTarget target = board.computeMoveTarget(yellowPieceAt(BoardConstants.YELLOW_APPROACH), steps);
+            assertTrue(target.isHomeStraight(), "steps " + steps + " gave " + target);
+            assertEquals(steps - 1, target.getPosition());
+        }
+    }
+
+    @Test
+    void sameTotalStepsReachSameHomeStraightCellWhetherStartingBeforeOrOnApproach() {
+        MoveTarget fromBefore = board.computeMoveTarget(yellowPieceAt(47), 8);
+        MoveTarget fromApproach = board.computeMoveTarget(yellowPieceAt(BoardConstants.YELLOW_APPROACH), 5);
+        assertEquals(fromBefore.toString(), fromApproach.toString());
+    }
+
+    @Test
+    void homeStraightCellsAreLabelledHomepath0ToHomepath4() {
+        Piece p = yellowPieceAt(10);
+        p.moveToHomePath(0);
+        assertEquals("yellowhomepath0", p.positionLabel());
+        p.moveToHomePath(4);
+        assertEquals("yellowhomepath4", p.positionLabel());
     }
 
     // Helpers

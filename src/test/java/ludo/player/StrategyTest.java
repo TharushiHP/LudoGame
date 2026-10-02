@@ -61,6 +61,27 @@ class StrategyTest {
         assertFalse(red.prefersMoveFromBase(all, board));
     }
 
+    @Test
+    void redBringsOutAnotherPieceOnSixWhenSixCannotCapture() {
+        // Arrange: one Red piece on the path, no opponent 6 cells ahead
+        RedPlayer red = new RedPlayer();
+        Piece r1 = red.getPieces().get(0);
+        r1.placeOnStart();
+        r1.setMainPathPosition(10);
+
+        Piece opponent = opponentPieceAt(PlayerColor.YELLOW, 30);
+        List<Piece> all = Arrays.asList(r1, opponent);
+
+        // Act & Assert
+        assertTrue(red.prefersMoveFromBase(all, board));
+    }
+
+    @Test
+    void redBringsOutPieceOnSixWhenNoPieceIsOnThePath() {
+        RedPlayer red = new RedPlayer();
+        assertTrue(red.prefersMoveFromBase(red.getPieces(), board));
+    }
+
     // Communication-based: mock Board only here so verify() can inspect the call.
     @Test
     void redStrategy_callsAdvance_whenCheckingForCaptures() {
@@ -163,6 +184,49 @@ class StrategyTest {
 
         // Assert
         assertNotEquals(first, second);
+    }
+
+    @Test
+    void blueSkipsHomePiecesAndContinuesTheCycle() {
+        // Arrange: B2 is Home, B1, B3 and B4 are on the board
+        BluePlayer blue = new BluePlayer();
+        Piece b1 = blue.getPieces().get(0);
+        Piece b2 = blue.getPieces().get(1);
+        Piece b3 = blue.getPieces().get(2);
+        Piece b4 = blue.getPieces().get(3);
+        b1.placeOnStart();
+        b1.setMainPathPosition(10);
+        b2.reachHome();
+        b3.placeOnStart();
+        b3.setMainPathPosition(20);
+        b4.placeOnStart();
+        b4.setMainPathPosition(30);
+        List<Piece> all = blue.getPieces();
+
+        // Act
+        Piece first = blue.choosePiece(all, board, 3);
+        Piece second = blue.choosePiece(all, board, 3);
+        Piece third = blue.choosePiece(all, board, 3);
+
+        // Assert: B1, then B2 is skipped, so B3, then B4
+        assertEquals(b1, first);
+        assertEquals(b3, second);
+        assertEquals(b4, third);
+    }
+
+    @Test
+    void blueStillChoosesCyclePieceThatCannotMove() {
+        // Arrange: B1 on homepath4 cannot use a 3 (exact roll needed); B2 could move
+        BluePlayer blue = new BluePlayer();
+        Piece b1 = blue.getPieces().get(0);
+        Piece b2 = blue.getPieces().get(1);
+        b1.placeOnStart();
+        b1.moveToHomePath(4);
+        b2.placeOnStart();
+        b2.setMainPathPosition(20);
+
+        // Act & Assert: Blue keeps to its cycle; the Game then skips the turn
+        assertEquals(b1, blue.choosePiece(blue.getPieces(), board, 3));
     }
 
     @Test

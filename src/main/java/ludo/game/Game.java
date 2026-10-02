@@ -19,6 +19,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Runs one LUDO-T simulation: turn order, dice, rules T-1 to T-15 and the mystery cell.
+ * Publishes every event to its listeners (Observer pattern, subject side).
+ */
 public class Game {
 
     private static final int MYSTERY_OPTIONS = 6;
@@ -30,6 +34,7 @@ public class Game {
     private final List<Player> players;
     private final List<GameEventListener> observers;
     private int roundNumber;
+    private int turnCount;
 
     public Game(Board board, Dice dice, Coin coin) {
         this.board = board;
@@ -38,10 +43,23 @@ public class Game {
         this.observers = new java.util.ArrayList<>(List.of(GameLogger.getInstance()));
         this.players = buildPlayers();
         this.roundNumber = 0;
+        this.turnCount = 0;
     }
 
     public void addObserver(GameEventListener listener) {
         observers.add(listener);
+    }
+
+    public int getRoundNumber() {
+        return roundNumber;
+    }
+
+    public int getTurnCount() {
+        return turnCount;
+    }
+
+    public boolean isRoundCapReached() {
+        return roundNumber >= MAX_ROUNDS && activePlayers() > 1;
     }
 
     private List<Player> buildPlayers() {
@@ -63,7 +81,7 @@ public class Game {
     private void printIntroduction() {
         for (Player p : players) {
             char initial = p.getColor().name().charAt(0);
-            publish("The " + p.getColor().display().toLowerCase()
+            publish(GameEvent.GAME_START, "The " + p.getColor().display().toLowerCase()
                     + " player has four (04) pieces named "
                     + initial + "1, " + initial + "2, "
                     + initial + "3, and " + initial + "4.");
@@ -74,14 +92,14 @@ public class Game {
         int[] rolls = new int[players.size()];
         for (int i = 0; i < players.size(); i++) {
             rolls[i] = dice.roll();
-            publish(players.get(i).getColor().display() + " rolls " + rolls[i]);
+            publish(GameEvent.DICE_ROLLED, players.get(i).getColor().display() + " rolls " + rolls[i]);
         }
         int highestIndex = 0;
         for (int i = 1; i < rolls.length; i++) {
             if (rolls[i] > rolls[highestIndex])
                 highestIndex = i;
         }
-        publish(players.get(highestIndex).getColor().display()
+        publish(GameEvent.FIRST_PLAYER_CHOSEN, players.get(highestIndex).getColor().display()
                 + " player has the highest roll and will begin the game.");
         List<Player> order = new java.util.ArrayList<>();
         for (int i = 0; i < players.size(); i++) {
@@ -96,41 +114,69 @@ public class Game {
                 .collect(Collectors.toList());
         String joined = String.join(", ", names.subList(0, names.size() - 1))
                 + ", and " + names.get(names.size() - 1);
-        publish("The order of a single round is " + joined + ".");
+        publish(GameEvent.FIRST_PLAYER_CHOSEN, "The order of a single round is " + joined + ".");
     }
 
+    // Rule 11: the game ends as soon as only one player still has pieces to bring home.
     private void mainLoop(List<Player> order) {
-        while (activePlayers() > 0 && roundNumber < MAX_ROUNDS) {
+        while (activePlayers() > 1 && roundNumber < MAX_ROUNDS) {
             roundNumber++;
-            publish("\n=== Round " + roundNumber + " ===");
+            publish(GameEvent.ROUND_START, "\n=== Round " + roundNumber + " ===");
             for (Player player : order) {
+                if (activePlayers() <= 1) {
+                    break;
+                }
                 if (!player.hasAllPiecesHome()) {
                     player.getPieces().forEach(Piece::decrementEffectRound);
+                    turnCount++;
                     executeTurn(player, order);
                 }
             }
             printRoundStatus(order);
-            board.onRoundComplete(allPieces(order));
-            announceMysterySpawn();
+            if (activePlayers() > 1) {
+                board.onRoundComplete(allPieces(order));
+                printMysteryStatus();
+            }
         }
-        if (roundNumber >= MAX_ROUNDS) {
-            publish("\nGame ended after " + MAX_ROUNDS + " rounds (round limit reached).");
+        if (activePlayers() <= 1) {
+            rankLastPlayer();
+        } else {
+            publish(GameEvent.GAME_OVER, "\nWARNING: the safety limit of " + MAX_ROUNDS
+                    + " rounds was reached before the game could finish."
+                    + " Players with pieces still on the board are not ranked.");
         }
         printFinalStandings();
     }
 
+    private void rankLastPlayer() {
+        players.stream()
+                .filter(p -> p.getFinishPosition() == 0)
+                .forEach(p -> {
+                    int rank = rankedPlayers() + 1;
+                    p.setFinishPosition(rank);
+                    publish(GameEvent.LAST_PLAYER_RANKED, "\n" + p.getColor().display()
+                            + " player is the only player left and takes "
+                            + positionLabel(rank) + " place.");
+                });
+    }
+
     private void printFinalStandings() {
-        publish("\n========================================");
-        publish("               GAME OVER                ");
-        publish("========================================");
+        publish(GameEvent.GAME_OVER, "\n========================================");
+        publish(GameEvent.GAME_OVER, "               GAME OVER                ");
+        publish(GameEvent.GAME_OVER, "========================================");
         players.stream()
                 .filter(p -> p.getFinishPosition() > 0)
                 .sorted(Comparator.comparingInt(Player::getFinishPosition))
                 .forEach(p -> {
                     String rank = positionLabel(p.getFinishPosition());
-                    publish(rank + " place: " + p.getColor().display() + " player wins!!!");
+                    publish(GameEvent.GAME_OVER, rank + " place: " + p.getColor().display() + " player wins!!!");
                 });
-        publish("========================================");
+        players.stream()
+                .filter(p -> p.getFinishPosition() == 0)
+                .forEach(p -> publish(GameEvent.GAME_OVER, "Not ranked: " + p.getColor().display() + " player"));
+        publish(GameEvent.GAME_OVER, "========================================");
+        publish(GameEvent.GAME_OVER, "Game finished after " + roundNumber + " rounds and "
+                + turnCount + " turns.");
     }
 
     private String positionLabel(int position) {
@@ -151,7 +197,8 @@ public class Game {
         boolean keepRolling;
         do {
             int roll = dice.roll();
-            publish("\n" + player.getColor().display() + " player rolled " + roll + ".");
+            publish(GameEvent.DICE_ROLLED, "\n" + player.getColor().display() + " player rolled " + roll + ".");
+            applyBriefingRule(player, roll);
 
             if (roll == BoardConstants.MOVE_FROM_BASE_ROLL) {
                 player.recordSix();
@@ -160,7 +207,7 @@ public class Game {
             }
 
             if (player.hasTripleConsecutiveSixes()) {
-                publish(player.getColor().display()
+                publish(GameEvent.TURN_SKIPPED, player.getColor().display()
                         + " rolled six three times consecutively. Turn passed.");
                 handleTripleSixRule(player);
                 return;
@@ -185,19 +232,20 @@ public class Game {
         Piece chosen = player.choosePiece(all, board, roll);
 
         if (chosen == null) {
-            publish(player.getColor().display() + " has no piece to move. Turn skipped.");
+            publish(GameEvent.TURN_SKIPPED, player.getColor().display() + " has no piece to move. Turn skipped.");
             return MoveResult.builder().moved(false).build();
         }
 
         if (chosen.isAtBase()) {
             if (rolledSix)
                 return activatePieceFromBase(player);
-            publish(player.getColor().display() + " has no movable piece. Turn skipped.");
+            publish(GameEvent.TURN_SKIPPED, player.getColor().display() + " has no movable piece. Turn skipped.");
             return MoveResult.builder().moved(false).build();
         }
 
         if (hasBriefingEffect(chosen)) {
-            handleBriefingRoll(player, chosen, roll);
+            publish(GameEvent.PIECE_BRIEFING, player.getColor().display() + " piece " + chosen.getName()
+                    + " is in briefing and cannot move. Turn skipped.");
             return MoveResult.builder().moved(false).build();
         }
 
@@ -217,9 +265,9 @@ public class Game {
         Direction dir = coin.toss();
         piece.setDirection(dir);
 
-        publish(player.getColor().display() + " player moves piece " + piece.getName()
-                + " to the starting point.");
-        publish(player.getColor().display() + " player now has "
+        publish(GameEvent.PIECE_MOVED_TO_START, player.getColor().display() + " player moves piece " + piece.getName()
+                + " to the starting point. The coin toss sets its direction to " + dir.display() + ".");
+        publish(GameEvent.PIECE_MOVED_TO_START, player.getColor().display() + " player now has "
                 + player.countPiecesOnBoard() + "/4 on pieces on the board and "
                 + player.countPiecesAtBase() + "/4 pieces on the base.");
         return MoveResult.builder().moved(true).build();
@@ -234,7 +282,7 @@ public class Game {
         MoveTarget target = board.computeMoveTarget(piece, steps);
 
         if (target.isOvershoot()) {
-            publish(player.getColor().display() + " piece " + piece.getName()
+            publish(GameEvent.TURN_SKIPPED, player.getColor().display() + " piece " + piece.getName()
                     + " cannot move - exact roll required to reach Home.");
             return MoveResult.builder().moved(false).build();
         }
@@ -274,14 +322,14 @@ public class Game {
     private MoveResult landOnHomeStraight(Player player, Piece piece, int newIndex) {
         String from = piece.positionLabel();
         piece.moveToHomePath(newIndex);
-        publish(player.getColor().display() + " moves piece " + piece.getName()
+        publish(GameEvent.PIECE_MOVED, player.getColor().display() + " moves piece " + piece.getName()
                 + " from location " + from + " to " + piece.positionLabel() + ".");
         return MoveResult.builder().moved(true).build();
     }
 
     private MoveResult reachHome(Player player, Piece piece) {
         piece.reachHome();
-        publish(player.getColor().display() + " piece " + piece.getName() + " has reached Home!");
+        publish(GameEvent.PIECE_REACHED_HOME, player.getColor().display() + " piece " + piece.getName() + " has reached Home!");
         checkFinish(player);
         return MoveResult.builder().moved(true).reachedHome(true).build();
     }
@@ -297,17 +345,17 @@ public class Game {
                     : blocker.getColor().display() + " piece " + blocker.getPieceNumber();
 
             int safeCell = board.findCellBeforeBlock(piece, steps, all);
-            publish(player.getColor().display() + " piece " + piece.getName()
+            publish(GameEvent.PIECE_BLOCKED, player.getColor().display() + " piece " + piece.getName()
                     + " is blocked from moving from " + piece.getMainPathPosition()
                     + " to " + targetCell + " by " + blockerDesc + ".");
 
             if (safeCell < 0 || safeCell == piece.getMainPathPosition()) {
-                publish(player.getColor().display()
+                publish(GameEvent.PIECE_BLOCKED, player.getColor().display()
                         + " does not have other pieces in the board to move instead of the blocked piece."
                         + " Ignoring the throw and moving on to the next player.");
                 return MoveResult.builder().moved(false).build();
             }
-            publish(player.getColor().display()
+            publish(GameEvent.PIECE_BLOCKED, player.getColor().display()
                     + " does not have other pieces in the board to move instead of the blocked piece."
                     + " Moved the piece to square " + safeCell + " which is the cell before the block.");
             piece.setMainPathPosition(safeCell);
@@ -320,7 +368,7 @@ public class Game {
 
         String fromLabel = piece.positionLabel();
         piece.setMainPathPosition(targetCell);
-        publish(player.getColor().display() + " moves piece " + piece.getName()
+        publish(GameEvent.PIECE_MOVED, player.getColor().display() + " moves piece " + piece.getName()
                 + " from location " + fromLabel + " to " + targetCell
                 + " by " + steps + " units in " + piece.getDirection().display() + " direction.");
 
@@ -363,7 +411,7 @@ public class Game {
         int blockSize = block.size();
         int stepsEach = diceValue / blockSize;
         if (stepsEach == 0) {
-            publish(player.getColor().display() + " block at cell " + piece.getMainPathPosition()
+            publish(GameEvent.PIECE_BLOCKED, player.getColor().display() + " block at cell " + piece.getMainPathPosition()
                     + " cannot move — dice value too small for block of size " + blockSize + ".");
             return MoveResult.builder().moved(false).build();
         }
@@ -381,7 +429,7 @@ public class Game {
             p.setMainPathPosition(toCell);
         }
 
-        publish(player.getColor().display() + " block moves from cell " + fromCell
+        publish(GameEvent.PIECE_MOVED, player.getColor().display() + " block moves from cell " + fromCell
                 + " to cell " + toCell + " by " + stepsEach + " units each in "
                 + blockDir.display() + " direction (Rule T-4).");
         return MoveResult.builder().moved(true).build();
@@ -390,23 +438,23 @@ public class Game {
     private MoveResult formBlock(Player player, Piece piece, int targetCell, int steps, List<Piece> all) {
         String fromLabel = piece.positionLabel();
         piece.setMainPathPosition(targetCell);
-        publish(player.getColor().display() + " moves piece " + piece.getName()
+        publish(GameEvent.PIECE_MOVED, player.getColor().display() + " moves piece " + piece.getName()
                 + " from location " + fromLabel + " to " + targetCell
                 + " by " + steps + " units in " + piece.getDirection().display() + " direction.");
-        publish(player.getColor().display() + " piece " + piece.getName()
+        publish(GameEvent.BLOCK_FORMED, player.getColor().display() + " piece " + piece.getName()
                 + " forms a block at cell " + targetCell + ".");
         return MoveResult.builder().moved(true).build();
     }
 
     private boolean captureOpponent(Player capturer, Piece capturerPiece,
             Piece target, int cell) {
-        publish(capturer.getColor().display() + " piece " + capturerPiece.getName()
+        publish(GameEvent.PIECE_CAPTURED, capturer.getColor().display() + " piece " + capturerPiece.getName()
                 + " lands on square " + cell + ", captures "
                 + target.getColor().display() + " piece " + target.getName()
                 + ", and returns it to the base.");
         target.resetToBase();
         capturerPiece.incrementCaptureCount();
-        publish(capturer.getColor().display() + " player now has "
+        publish(GameEvent.PIECE_CAPTURED, capturer.getColor().display() + " player now has "
                 + capturer.countPiecesOnBoard() + "/4 on pieces on the board and "
                 + capturer.countPiecesAtBase() + "/4 pieces on the base.");
         return true;
@@ -419,11 +467,11 @@ public class Game {
         if (!capturerIsInBlock)
             return false;
 
-        publish(capturer.getColor().display() + " block captures opponent block at cell " + cell + ".");
+        publish(GameEvent.PIECE_CAPTURED, capturer.getColor().display() + " block captures opponent block at cell " + cell + ".");
         for (Piece target : opponentBlock) {
             target.resetToBase();
             capturerPiece.incrementCaptureCount();
-            publish(target.getColor().display() + " piece " + target.getName()
+            publish(GameEvent.PIECE_CAPTURED, target.getColor().display() + " piece " + target.getName()
                     + " returned to base.");
         }
         return true;
@@ -431,7 +479,7 @@ public class Game {
 
     private void handleMysteryCell(Player player, Piece piece, List<Piece> all) {
         int option = dice.roll() % MYSTERY_OPTIONS;
-        publish(player.getColor().display()
+        publish(GameEvent.MYSTERY_CELL_TELEPORT, player.getColor().display()
                 + " player lands on a mystery cell and is teleported to "
                 + teleportName(option) + ".");
         applyTeleport(player, piece, option);
@@ -481,14 +529,14 @@ public class Game {
 
     private void teleportAlpha(Player player, Piece piece) {
         piece.setMainPathPosition(BoardConstants.ALPHA);
-        publish(player.getColor().display() + " piece " + piece.getName() + " teleported to Alpha.");
+        publish(GameEvent.MYSTERY_CELL_TELEPORT, player.getColor().display() + " piece " + piece.getName() + " teleported to Alpha.");
         if (coin.toss() == Direction.CLOCKWISE) {
             piece.setActiveEffect(new EnergizedEffect());
-            publish(player.getColor().display() + " piece " + piece.getName()
+            publish(GameEvent.PIECE_ENERGIZED, player.getColor().display() + " piece " + piece.getName()
                     + " feels energized, and movement speed doubles.");
         } else {
             piece.setActiveEffect(new SickEffect());
-            publish(player.getColor().display() + " piece " + piece.getName()
+            publish(GameEvent.PIECE_SICK, player.getColor().display() + " piece " + piece.getName()
                     + " feels sick, and movement speed halves.");
         }
     }
@@ -496,38 +544,38 @@ public class Game {
     private void teleportBeta(Player player, Piece piece) {
         piece.setMainPathPosition(BoardConstants.BETA);
         piece.setActiveEffect(new BriefingEffect());
-        publish(player.getColor().display() + " piece " + piece.getName() + " teleported to Beta.");
-        publish(player.getColor().display() + " piece " + piece.getName()
+        publish(GameEvent.MYSTERY_CELL_TELEPORT, player.getColor().display() + " piece " + piece.getName() + " teleported to Beta.");
+        publish(GameEvent.PIECE_BRIEFING, player.getColor().display() + " piece " + piece.getName()
                 + " attends briefing and cannot move for four rounds.");
     }
 
     private void teleportGamma(Player player, Piece piece) {
-        publish(player.getColor().display() + " piece " + piece.getName() + " teleported to Gamma.");
+        publish(GameEvent.MYSTERY_CELL_TELEPORT, player.getColor().display() + " piece " + piece.getName() + " teleported to Gamma.");
         if (piece.getDirection() == Direction.CLOCKWISE) {
             piece.setMainPathPosition(BoardConstants.GAMMA);
             piece.setDirection(Direction.COUNTER_CLOCKWISE);
-            publish("The " + player.getColor().display() + " piece " + piece.getName()
+            publish(GameEvent.PIECE_DIRECTION_CHANGED, "The " + player.getColor().display() + " piece " + piece.getName()
                     + ", which was moving clockwise, has changed to moving counterclockwise.");
         } else {
             teleportBeta(player, piece);
-            publish("The " + player.getColor().display() + " piece " + piece.getName()
+            publish(GameEvent.MYSTERY_CELL_TELEPORT, "The " + player.getColor().display() + " piece " + piece.getName()
                     + " is moving in a counterclockwise direction. Teleporting to Beta from Gamma.");
         }
     }
 
     private void teleportBase(Player player, Piece piece) {
         piece.resetToBase();
-        publish(player.getColor().display() + " piece " + piece.getName() + " teleported to Base.");
+        publish(GameEvent.MYSTERY_CELL_TELEPORT, player.getColor().display() + " piece " + piece.getName() + " teleported to Base.");
     }
 
     private void teleportStart(Player player, Piece piece) {
         piece.placeOnStart();
-        publish(player.getColor().display() + " piece " + piece.getName() + " teleported to X.");
+        publish(GameEvent.MYSTERY_CELL_TELEPORT, player.getColor().display() + " piece " + piece.getName() + " teleported to X.");
     }
 
     private void teleportApproach(Player player, Piece piece) {
         piece.setMainPathPosition(piece.approachPosition());
-        publish(player.getColor().display() + " piece " + piece.getName()
+        publish(GameEvent.MYSTERY_CELL_TELEPORT, player.getColor().display() + " piece " + piece.getName()
                 + " teleported to Approach.");
     }
 
@@ -535,14 +583,12 @@ public class Game {
         return piece.hasEffect() && piece.getActiveEffect() instanceof BriefingEffect;
     }
 
-    private void handleBriefingRoll(Player player, Piece piece, int roll) {
-        BriefingEffect briefing = (BriefingEffect) piece.getActiveEffect();
-        briefing.recordRoll(roll);
-        if (briefing.shouldTeleportToBase()) {
-            publish(player.getColor().display() + " piece " + piece.getName()
+    // Rule T-13: checked on every roll the player makes, not only when the briefing piece is chosen.
+    private void applyBriefingRule(Player player, int roll) {
+        for (Piece piece : player.recordRollForBriefing(roll)) {
+            publish(GameEvent.PIECE_BRIEFING_TELEPORT, player.getColor().display() + " piece " + piece.getName()
                     + " is movement-restricted and has rolled three consecutively."
                     + " Teleporting piece " + piece.getName() + " to base.");
-            piece.resetToBase();
         }
     }
 
@@ -554,43 +600,41 @@ public class Game {
             Piece toDisplace = block.get(i);
             int newPos = board.advance(toDisplace.getMainPathPosition(), 6, toDisplace.getDirection());
             toDisplace.setMainPathPosition(newPos);
-            publish(player.getColor().display() + " blockade broken: piece "
+            publish(GameEvent.PIECE_MOVED, player.getColor().display() + " blockade broken: piece "
                     + toDisplace.getName() + " moved to cell " + newPos + ".");
         }
     }
 
     private void checkFinish(Player player) {
         if (player.hasAllPiecesHome() && player.getFinishPosition() == 0) {
-            int rank = (int) players.stream()
-                    .filter(p -> p.getFinishPosition() > 0)
-                    .count() + 1;
+            int rank = rankedPlayers() + 1;
             player.setFinishPosition(rank);
-            publish(player.getColor().display() + " player wins!!!");
+            publish(GameEvent.PLAYER_WINS, player.getColor().display() + " player wins!!!");
         }
     }
 
     private void printRoundStatus(List<Player> order) {
         for (Player p : order) {
-            publish(p.describeState());
-            publish("============================");
-            publish("Location of pieces " + p.getColor().display());
-            publish("============================");
+            publish(GameEvent.ROUND_STATUS, p.describeState());
+            publish(GameEvent.ROUND_STATUS, "============================");
+            publish(GameEvent.ROUND_STATUS, "Location of pieces " + p.getColor().display());
+            publish(GameEvent.ROUND_STATUS, "============================");
             for (Piece piece : p.getPieces()) {
-                publish("Piece " + piece.getName() + " -> " + piece.positionLabel());
+                publish(GameEvent.ROUND_STATUS, "Piece " + piece.getName() + " -> " + piece.positionLabel());
             }
-        }
-        if (board.isMysteryActive()) {
-            publish("The mystery cell is at " + board.getMysteryCell().getPosition()
-                    + " and will be at that location for the next "
-                    + board.getMysteryCell().getRoundsRemaining() + " values.");
         }
     }
 
-    private void announceMysterySpawn() {
+    // Printed after the board has counted the round, so the number shown is the rounds really left.
+    private void printMysteryStatus() {
         if (board.getMysteryCell().wasJustSpawned()) {
-            publish("A mystery cell has spawned in location "
+            publish(GameEvent.MYSTERY_CELL_SPAWNED, "A mystery cell has spawned in location "
                     + board.getMysteryCell().getPosition()
                     + " and will be at this location for the next four rounds.");
+        } else if (board.isMysteryActive()) {
+            publish(GameEvent.ROUND_STATUS, "The mystery cell is at " + board.getMysteryCell().getPosition()
+                    + " and will be at that location for the next "
+                    + board.getMysteryCell().getRoundsRemaining() + " rounds.");
         }
     }
 
@@ -604,7 +648,11 @@ public class Game {
         return (int) players.stream().filter(p -> !p.hasAllPiecesHome()).count();
     }
 
-    private void publish(String message) {
-        observers.forEach(listener -> listener.onEvent(GameEvent.DICE_ROLLED, message));
+    private int rankedPlayers() {
+        return (int) players.stream().filter(p -> p.getFinishPosition() > 0).count();
+    }
+
+    private void publish(GameEvent event, String message) {
+        observers.forEach(listener -> listener.onEvent(event, message));
     }
 }

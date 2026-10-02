@@ -52,10 +52,13 @@ class EffectTest {
         assertFalse(effect.isActive());
     }
 
+    // Rule T-13: three consecutive 3s (not two) send the briefing piece to base.
     @Test
-    void briefingEffectDetectsConsecutiveThrees() {
+    void briefingEffectDetectsThreeConsecutiveThrees() {
         BriefingEffect effect = new BriefingEffect();
         effect.recordRoll(3);
+        effect.recordRoll(3);
+        assertFalse(effect.shouldTeleportToBase());
         effect.recordRoll(3);
         assertTrue(effect.shouldTeleportToBase());
     }

@@ -48,13 +48,6 @@ public class Board {
         int approach = piece.approachPosition();
         Direction dir = piece.getDirection();
 
-        if (current == approach && dir == Direction.CLOCKWISE) {
-            if (steps == BoardConstants.HOME_STRAIGHT_SIZE) {
-                return MoveTarget.home();
-            }
-            return computeHomeStraightTarget(-1, steps);
-        }
-
         int stepsToApproach = stepsToReachApproach(current, approach, dir);
 
         if (stepsToApproach < 0 || stepsToApproach > steps) {

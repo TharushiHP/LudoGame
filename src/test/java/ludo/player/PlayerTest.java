@@ -1,9 +1,12 @@
 package ludo.player;
 
 import ludo.board.PlayerColor;
+import ludo.effect.BriefingEffect;
 import ludo.piece.Piece;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -113,5 +116,38 @@ class PlayerTest {
     @Test
     void yellowPlayerColorIsYellow() {
         assertEquals(PlayerColor.YELLOW, yellowPlayer.getColor());
+    }
+
+    // Rule T-13: every roll the player makes counts, whichever piece is moved.
+    @Test
+    void briefingPieceGoesToBaseAfterPlayersThirdConsecutiveThree() {
+        // Arrange: R1 is in briefing, R2 is a normal piece on the board
+        Piece r1 = redPlayer.getPieces().get(0);
+        Piece r2 = redPlayer.getPieces().get(1);
+        r1.placeOnStart();
+        r1.setMainPathPosition(25);
+        r1.setActiveEffect(new BriefingEffect());
+        r2.placeOnStart();
+
+        // Act & Assert
+        assertTrue(redPlayer.recordRollForBriefing(3).isEmpty());
+        assertTrue(redPlayer.recordRollForBriefing(3).isEmpty());
+        assertEquals(List.of(r1), redPlayer.recordRollForBriefing(3));
+        assertTrue(r1.isAtBase());
+        assertTrue(r2.isOnMainPath());
+    }
+
+    @Test
+    void briefingCountResetsWhenPlayerRollsSomethingElse() {
+        Piece r1 = redPlayer.getPieces().get(0);
+        r1.placeOnStart();
+        r1.setActiveEffect(new BriefingEffect());
+
+        redPlayer.recordRollForBriefing(3);
+        redPlayer.recordRollForBriefing(3);
+        redPlayer.recordRollForBriefing(5);
+        redPlayer.recordRollForBriefing(3);
+
+        assertTrue(r1.isOnMainPath());
     }
 }

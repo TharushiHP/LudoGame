@@ -7,12 +7,21 @@ import ludo.dice.RandomSource;
 
 import java.util.Random;
 
+/**
+ * Builds a {@link Game} with its board, dice and coin sharing one random source
+ * (Builder pattern). A fixed seed makes a game replay exactly.
+ */
 public class GameBuilder {
 
     private RandomSource randomSource;
 
     public GameBuilder withRandomSource(RandomSource source) {
         this.randomSource = source;
+        return this;
+    }
+
+    public GameBuilder withSeed(long seed) {
+        this.randomSource = new JavaRandom(seed);
         return this;
     }
 
@@ -25,7 +34,15 @@ public class GameBuilder {
     }
 
     private static class JavaRandom implements RandomSource {
-        private final Random random = new Random();
+        private final Random random;
+
+        JavaRandom() {
+            this.random = new Random();
+        }
+
+        JavaRandom(long seed) {
+            this.random = new Random(seed);
+        }
 
         @Override
         public int nextInt(int bound) {
