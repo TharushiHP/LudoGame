@@ -54,6 +54,12 @@ public class BriefingEffect implements PieceEffect {
         return consecutiveThrees >= CONSECUTIVE_ROLLS_TO_TELEPORT;
     }
 
+    @Override
+    public EffectKind kind() {
+        return EffectKind.BRIEFING;
+    }
+
+    @Override
     public int getRoundsRemaining() {
         return roundsRemaining;
     }

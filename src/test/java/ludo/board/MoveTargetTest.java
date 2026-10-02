@@ -1,4 +1,4 @@
-package ludo.game;
+package ludo.board;
 
 import org.junit.jupiter.api.Test;
 

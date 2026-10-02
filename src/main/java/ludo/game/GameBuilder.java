@@ -1,19 +1,30 @@
 package ludo.game;
 
 import ludo.board.Board;
+import ludo.board.PlayerColor;
 import ludo.dice.Coin;
 import ludo.dice.Dice;
 import ludo.dice.RandomSource;
+import ludo.player.Player;
+import ludo.player.PlayerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 /**
- * Builds a {@link Game} with its board, dice and coin sharing one random source
- * (Builder pattern). A fixed seed makes a game replay exactly.
+ * Builds a {@link Game} and wires every collaborator into it (Builder pattern; Dependency
+ * Injection / composition root for the game): random source, board, dice, coin, the four
+ * players, the {@link MoveDecider}, the {@link TurnGate} and the event listeners.
+ * Defaults give the console game: {@link LocalStrategyDecider}, {@link NoOpTurnGate}, no listeners.
+ * A fixed seed makes a game replay exactly.
  */
 public class GameBuilder {
 
     private RandomSource randomSource;
+    private MoveDecider moveDecider;
+    private TurnGate turnGate = new NoOpTurnGate();
+    private final List<GameEventListener> listeners = new ArrayList<>();
     private int maxRounds = Game.DEFAULT_MAX_ROUNDS;
     private int stalemateRounds = Game.DEFAULT_STALEMATE_ROUNDS;
 
@@ -24,6 +35,22 @@ public class GameBuilder {
 
     public GameBuilder withSeed(long seed) {
         this.randomSource = new JavaRandom(seed);
+        return this;
+    }
+
+    /** Replaces the default {@link LocalStrategyDecider}, e.g. with a remote-client decider. */
+    public GameBuilder withMoveDecider(MoveDecider decider) {
+        this.moveDecider = decider;
+        return this;
+    }
+
+    public GameBuilder withTurnGate(TurnGate gate) {
+        this.turnGate = gate;
+        return this;
+    }
+
+    public GameBuilder withListener(GameEventListener listener) {
+        this.listeners.add(listener);
         return this;
     }
 
@@ -42,7 +69,19 @@ public class GameBuilder {
         Board board = new Board(source);
         Dice dice = new Dice(source);
         Coin coin = new Coin(source);
-        return new Game(board, dice, coin, maxRounds, stalemateRounds);
+        List<Player> players = createPlayers();
+        MoveDecider decider = moveDecider != null ? moveDecider : new LocalStrategyDecider(players, board);
+        return new Game(board, dice, coin, players, decider, turnGate, listeners, maxRounds, stalemateRounds);
+    }
+
+    // The order Yellow, Blue, Red, Green is the A1 order used for the starting roll-off.
+    private List<Player> createPlayers() {
+        PlayerFactory factory = new PlayerFactory();
+        return List.of(
+                factory.create(PlayerColor.YELLOW),
+                factory.create(PlayerColor.BLUE),
+                factory.create(PlayerColor.RED),
+                factory.create(PlayerColor.GREEN));
     }
 
     private static class JavaRandom implements RandomSource {

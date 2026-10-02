@@ -1,5 +1,11 @@
-package ludo.game;
+package ludo.board;
 
+/**
+ * Immutable value object: where a move would end (main-path cell, home-straight index,
+ * Home, or overshoot). Created through static factory methods.
+ * Lives in the board package (moved from ludo.game) so that board no longer depends on game,
+ * which removes a package cycle (Acyclic Dependencies Principle).
+ */
 public class MoveTarget {
 
     public enum Type {

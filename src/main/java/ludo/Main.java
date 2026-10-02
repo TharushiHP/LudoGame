@@ -7,7 +7,8 @@ import ludo.output.GameLogger;
 import java.util.Random;
 
 /**
- * Console entry point: builds and runs one simulation.
+ * Console entry point and composition root: creates the console listener, wires it into the
+ * game through the GameBuilder (Dependency Injection) and runs one simulation.
  * Optional argument {@code --seed=<number>} replays a game exactly; without it a random
  * seed is chosen and printed so the game can still be replayed.
  */
@@ -24,8 +25,12 @@ public class Main {
             System.exit(1);
             return;
         }
-        GameLogger.getInstance().log("Seed: " + seed + " (replay this game with " + SEED_PREFIX + seed + ")");
-        Game game = new GameBuilder().withSeed(seed).build();
+        GameLogger console = new GameLogger();
+        console.log("Seed: " + seed + " (replay this game with " + SEED_PREFIX + seed + ")");
+        Game game = new GameBuilder()
+                .withSeed(seed)
+                .withListener(console)
+                .build();
         game.run();
     }
 

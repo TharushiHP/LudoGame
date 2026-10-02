@@ -1,8 +1,5 @@
 package ludo.game;
 
-import ludo.board.Board;
-import ludo.dice.Coin;
-import ludo.dice.Dice;
 import ludo.dice.RandomSource;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +17,7 @@ class GameIntegrationTest {
         Queue<Integer> sequence = buildDeterministicSequence();
         RandomSource src = bound -> sequence.isEmpty() ? 0 : sequence.poll() % bound;
 
-        Game game = new Game(new Board(src), new Dice(src), new Coin(src));
+        Game game = new GameBuilder().withRandomSource(src).build();
 
         assertDoesNotThrow(game::run);
     }
@@ -40,7 +37,7 @@ class GameIntegrationTest {
         GameEventListener mockListener = mock(GameEventListener.class);
         Queue<Integer> sequence = buildDeterministicSequence();
         RandomSource src = bound -> sequence.isEmpty() ? 0 : sequence.poll() % bound;
-        Game game = new Game(new Board(src), new Dice(src), new Coin(src));
+        Game game = new GameBuilder().withRandomSource(src).build();
         game.addObserver(mockListener);
 
         //Act

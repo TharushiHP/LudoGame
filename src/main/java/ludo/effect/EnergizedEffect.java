@@ -2,6 +2,10 @@ package ludo.effect;
 
 import ludo.board.BoardConstants;
 
+/**
+ * Energized effect from the Alpha teleport: the piece moves double the dice value for four rounds.
+ * One of the interchangeable {@link PieceEffect} implementations (Strategy pattern, OCP).
+ */
 public class EnergizedEffect implements PieceEffect {
 
     private int roundsRemaining;
@@ -32,6 +36,12 @@ public class EnergizedEffect implements PieceEffect {
         return "energized (movement speed doubles)";
     }
 
+    @Override
+    public EffectKind kind() {
+        return EffectKind.ENERGIZED;
+    }
+
+    @Override
     public int getRoundsRemaining() {
         return roundsRemaining;
     }

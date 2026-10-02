@@ -1,13 +1,16 @@
 package ludo.board;
 
 import ludo.dice.RandomSource;
-import ludo.game.MoveTarget;
 import ludo.piece.Direction;
 import ludo.piece.Piece;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Board geometry and path rules: where a move lands, blocks in the way, and the mystery cell
+ * schedule. Pure rule logic with no I/O (Single Responsibility).
+ */
 public class Board {
 
     private final MysteryCell mysteryCell;

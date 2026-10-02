@@ -1,6 +1,5 @@
 package ludo.board;
 
-import ludo.game.MoveTarget;
 import ludo.piece.Direction;
 import ludo.piece.Piece;
 import org.junit.jupiter.api.BeforeEach;

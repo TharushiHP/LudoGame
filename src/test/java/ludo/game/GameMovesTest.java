@@ -198,7 +198,7 @@ class GameMovesTest {
     // T-6: three sixes break blocks
 
     @Test
-    void threeSixesPassTheTurnAndBreakTheBlock() {
+    void threeSixesPassTheTurnAndBreakTheBlock() throws InterruptedException {
         Piece y1 = place(PlayerColor.YELLOW, 1, 10, Direction.CLOCKWISE);
         Piece y2 = place(PlayerColor.YELLOW, 2, 10, Direction.CLOCKWISE);
         place(PlayerColor.YELLOW, 3, 30, Direction.CLOCKWISE);

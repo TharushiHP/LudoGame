@@ -2,26 +2,37 @@ package ludo.game;
 
 import ludo.board.Board;
 import ludo.board.BoardConstants;
+import ludo.board.MoveTarget;
 import ludo.board.PlayerColor;
 import ludo.dice.Coin;
 import ludo.dice.Dice;
 import ludo.effect.BriefingEffect;
 import ludo.effect.EnergizedEffect;
 import ludo.effect.SickEffect;
-import ludo.output.GameLogger;
+import ludo.board.MysteryCell;
 import ludo.piece.Direction;
 import ludo.piece.Piece;
 import ludo.player.Player;
-import ludo.player.PlayerFactory;
 
-import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.OptionalInt;
 import java.util.stream.Collectors;
 
 /**
- * Runs one LUDO-T simulation: turn order, dice, rules T-1 to T-15 and the mystery cell.
- * Publishes every event to its listeners (Observer pattern, subject side).
+ * Runs one LUDO-T simulation and owns the authoritative game state: turn order, dice, rules
+ * T-1 to T-15 and the mystery cell.
+ * <ul>
+ *   <li>Observer pattern (subject): publishes every event to its {@link GameEventListener}s.</li>
+ *   <li>Dependency Inversion: player decisions come through the {@link MoveDecider} port and
+ *       turn pacing through the {@link TurnGate} port; Game never knows whether they are local
+ *       strategies or remote clients.</li>
+ *   <li>Dependency Injection: everything it uses is passed in by {@link GameBuilder};
+ *       Game creates none of its collaborators itself.</li>
+ *   <li>{@link #snapshot()} returns an immutable {@link GameSnapshot} without changing any state.</li>
+ * </ul>
  */
 public class Game {
 
@@ -35,27 +46,35 @@ public class Game {
     private final Coin coin;
     private final List<Player> players;
     private final List<GameEventListener> observers;
+    private final MoveDecider moveDecider;
+    private final TurnGate turnGate;
     private final int maxRounds;
     private final int stalemateRounds;
     private int roundNumber;
     private int turnCount;
     private int lastProgressRound;
+    private GameStatus status;
+    private PlayerColor currentPlayer;
+    private int lastRoll;
 
-    public Game(Board board, Dice dice, Coin coin) {
-        this(board, dice, coin, DEFAULT_MAX_ROUNDS, DEFAULT_STALEMATE_ROUNDS);
-    }
-
-    public Game(Board board, Dice dice, Coin coin, int maxRounds, int stalemateRounds) {
+    // Package-private: build games through GameBuilder, which wires every collaborator.
+    Game(Board board, Dice dice, Coin coin, List<Player> players, MoveDecider moveDecider,
+            TurnGate turnGate, List<GameEventListener> listeners, int maxRounds, int stalemateRounds) {
         this.board = board;
         this.dice = dice;
         this.coin = coin;
+        this.players = List.copyOf(players);
+        this.moveDecider = moveDecider;
+        this.turnGate = turnGate;
+        this.observers = new java.util.ArrayList<>(listeners);
         this.maxRounds = maxRounds;
         this.stalemateRounds = stalemateRounds;
-        this.observers = new java.util.ArrayList<>(List.of(GameLogger.getInstance()));
-        this.players = buildPlayers();
         this.roundNumber = 0;
         this.turnCount = 0;
         this.lastProgressRound = 0;
+        this.status = GameStatus.NOT_STARTED;
+        this.currentPlayer = null;
+        this.lastRoll = 0;
     }
 
     public void addObserver(GameEventListener listener) {
@@ -88,24 +107,62 @@ public class Game {
         return processRoll(playerOf(color), players, roll);
     }
 
-    void playTurn(PlayerColor color) {
-        executeTurn(playerOf(color), players);
+    void playTurn(PlayerColor color) throws InterruptedException {
+        takeTurn(playerOf(color), players);
     }
 
-    private List<Player> buildPlayers() {
-        PlayerFactory factory = new PlayerFactory();
-        return Arrays.asList(
-                factory.create(PlayerColor.YELLOW),
-                factory.create(PlayerColor.BLUE),
-                factory.create(PlayerColor.RED),
-                factory.create(PlayerColor.GREEN));
+    /**
+     * Immutable picture of the current state. Only reads state: taking a snapshot at any moment,
+     * any number of times, never changes the game.
+     */
+    public GameSnapshot snapshot() {
+        Map<PlayerColor, Integer> finishPositions = new EnumMap<>(PlayerColor.class);
+        List<PieceSnapshot> pieces = new java.util.ArrayList<>();
+        for (Player player : players) {
+            finishPositions.put(player.getColor(), player.getFinishPosition());
+            for (Piece piece : player.getPieces()) {
+                pieces.add(PieceSnapshot.of(piece, isInBlock(piece, player)));
+            }
+        }
+        MysteryCell mysteryCell = board.getMysteryCell();
+        MysterySnapshot mystery = mysteryCell.isActive()
+                ? new MysterySnapshot(mysteryCell.getPosition(), mysteryCell.getRoundsRemaining())
+                : new MysterySnapshot(-1, 0);
+        return new GameSnapshot(roundNumber, turnCount, currentPlayer, lastRoll, mystery,
+                finishPositions, status, pieces);
     }
 
+    private boolean isInBlock(Piece piece, Player owner) {
+        return piece.isOnMainPath() && owner.getPieces().stream()
+                .filter(Piece::isOnMainPath)
+                .filter(p -> p.getMainPathPosition() == piece.getMainPathPosition())
+                .count() >= 2;
+    }
+
+    /**
+     * Plays the whole game on the calling thread. If a {@link TurnGate} wait is interrupted
+     * (e.g. server shutdown), the game stops with status ABORTED and the interrupt flag is restored.
+     */
     public void run() {
-        printIntroduction();
-        List<Player> turnOrder = resolveStartingOrder();
-        printTurnOrder(turnOrder);
-        mainLoop(turnOrder);
+        status = GameStatus.IN_PROGRESS;
+        try {
+            printIntroduction();
+            List<Player> turnOrder = resolveStartingOrder();
+            printTurnOrder(turnOrder);
+            mainLoop(turnOrder);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            status = GameStatus.ABORTED;
+            publish(GameEvent.GAME_OVER, "\nThe game was stopped before it finished.");
+        }
+    }
+
+    // TurnGate is called exactly once before and once after each player's turn.
+    private void takeTurn(Player player, List<Player> order) throws InterruptedException {
+        currentPlayer = player.getColor();
+        turnGate.beforeRoll(player.getColor());
+        executeTurn(player, order);
+        turnGate.afterTurn(snapshot());
     }
 
     private void printIntroduction() {
@@ -149,7 +206,7 @@ public class Game {
 
     // Rule 11: the game ends as soon as only one player still has pieces to bring home.
     // Stalemate rule (fills a spec gap): it also ends after stalemateRounds rounds without progress.
-    private void mainLoop(List<Player> order) {
+    private void mainLoop(List<Player> order) throws InterruptedException {
         while (activePlayers() > 1 && roundNumber < maxRounds && !isStalemate()) {
             roundNumber++;
             publish(GameEvent.ROUND_START, "\n=== Round " + roundNumber + " ===");
@@ -160,7 +217,7 @@ public class Game {
                 if (!player.hasAllPiecesHome()) {
                     player.getPieces().forEach(Piece::decrementEffectRound);
                     turnCount++;
-                    executeTurn(player, order);
+                    takeTurn(player, order);
                 }
             }
             printRoundStatus(order);
@@ -171,12 +228,14 @@ public class Game {
         }
         if (activePlayers() <= 1) {
             rankLastPlayer();
+            status = GameStatus.FINISHED;
         } else if (isStalemate()) {
             declareStalemate();
         } else {
             publish(GameEvent.GAME_OVER, "\nWARNING: the safety limit of " + maxRounds
                     + " rounds was reached before the game could finish."
                     + " Players with pieces still on the board are not ranked.");
+            status = GameStatus.ROUND_CAP_REACHED;
         }
         printFinalStandings();
     }
@@ -208,6 +267,7 @@ public class Game {
             publish(GameEvent.STALEMATE, p.getColor().display() + " player takes " + positionLabel(rank)
                     + " place (" + p.countPiecesHome() + " pieces Home, " + cellsLeftFor(p) + " cells left).");
         }
+        status = GameStatus.STALEMATE;
     }
 
     // An estimate: it ignores the T-7 capture requirement and extra laps for counterclockwise pieces.
@@ -265,6 +325,7 @@ public class Game {
         boolean keepRolling;
         do {
             int roll = dice.roll();
+            lastRoll = roll;
             publish(GameEvent.DICE_ROLLED, "\n" + player.getColor().display() + " player rolled " + roll + ".");
             applyBriefingRule(player, roll);
 
@@ -293,13 +354,13 @@ public class Game {
         boolean rolledSix = (roll == BoardConstants.MOVE_FROM_BASE_ROLL);
         boolean hasPiecesAtBase = player.countPiecesAtBase() > 0;
 
-        if (rolledSix && hasPiecesAtBase && player.prefersMoveFromBase(all, board)) {
+        if (rolledSix && hasPiecesAtBase && moveDecider.prefersMoveFromBase(snapshot(), player.getColor())) {
             return activatePieceFromBase(player);
         }
 
-        // Rule 7: if the chosen piece cannot move, ask the strategy again without it.
+        // Rule 7: if the chosen piece cannot move, ask the decider again without it.
         List<Rejection> rejections = new java.util.ArrayList<>();
-        Piece chosen = player.choosePiece(all, board, roll);
+        Piece chosen = askForPiece(player, roll, List.of());
         while (chosen != null) {
             if (chosen.isAtBase()) {
                 if (rolledSix)
@@ -311,11 +372,26 @@ public class Game {
                 publish(rejection.event(), rejection.reason());
                 rejections.add(rejection);
             }
-            if (!player.triesOtherPiecesWhenBlocked())
+            if (!moveDecider.triesOtherPiecesWhenBlocked(player.getColor()))
                 break;
-            chosen = player.choosePiece(all, board, roll, unavailablePieces(player, rejections, rolledSix));
+            chosen = askForPiece(player, roll, unavailablePieces(player, rejections, rolledSix));
         }
         return moveUpToBlockOrSkip(player, rejections);
+    }
+
+    // Asks the MoveDecider port to choose among the player's pieces that are not unavailable.
+    private Piece askForPiece(Player player, int roll, List<Piece> unavailable) {
+        List<Integer> candidates = player.getPieces().stream()
+                .filter(p -> !unavailable.contains(p))
+                .map(Piece::getPieceNumber)
+                .collect(Collectors.toList());
+        OptionalInt choice = moveDecider.choosePiece(snapshot(), player.getColor(), roll, candidates);
+        if (choice.isEmpty())
+            return null;
+        if (!candidates.contains(choice.getAsInt()))
+            throw new IllegalStateException(player.getColor().display() + " chose piece " + choice.getAsInt()
+                    + ", which is not one of the candidates " + candidates);
+        return player.getPieces().get(choice.getAsInt() - 1);
     }
 
     /** Why a chosen piece cannot make its full move, and where it could stop instead (T-3), if anywhere. */
@@ -390,7 +466,7 @@ public class Game {
             publish(GameEvent.TURN_SKIPPED, colour + " has no movable piece. Turn skipped.");
             return MoveResult.builder().moved(false).build();
         }
-        String noOtherPiece = player.triesOtherPiecesWhenBlocked()
+        String noOtherPiece = moveDecider.triesOtherPiecesWhenBlocked(player.getColor())
                 ? " does not have other pieces in the board to move instead of the blocked piece."
                 : " keeps to its cycle and does not move another piece instead.";
         for (Rejection rejection : rejections) {
@@ -792,7 +868,8 @@ public class Game {
 
     // Printed after the board has counted the round, so the number shown is the rounds really left.
     private void printMysteryStatus() {
-        if (board.getMysteryCell().wasJustSpawned()) {
+        if (board.getMysteryCell().isJustSpawned()) {
+            board.getMysteryCell().clearJustSpawned();
             publish(GameEvent.MYSTERY_CELL_SPAWNED, "A mystery cell has spawned in location "
                     + board.getMysteryCell().getPosition()
                     + " and will be at this location for the next four rounds.");

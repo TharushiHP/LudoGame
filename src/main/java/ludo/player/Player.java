@@ -9,6 +9,7 @@ import ludo.player.strategy.MoveStrategy;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -138,7 +139,8 @@ public abstract class Player {
     }
 
     public PlayerColor getColor()          { return color; }
-    public List<Piece> getPieces()         { return pieces; }
+    /** Read-only view: callers can move pieces but cannot add, remove or reorder them (encapsulation). */
+    public List<Piece> getPieces()         { return Collections.unmodifiableList(pieces); }
     public int getConsecutiveSixes()       { return consecutiveSixes; }
 
     public String describeState() {

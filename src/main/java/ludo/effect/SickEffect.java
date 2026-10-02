@@ -2,6 +2,10 @@ package ludo.effect;
 
 import ludo.board.BoardConstants;
 
+/**
+ * Sick effect from the Alpha teleport: the piece moves half the dice value (rounded down) for four rounds.
+ * One of the interchangeable {@link PieceEffect} implementations (Strategy pattern, OCP).
+ */
 public class SickEffect implements PieceEffect {
 
     private int roundsRemaining;
@@ -32,6 +36,12 @@ public class SickEffect implements PieceEffect {
         return "sick (movement speed halves)";
     }
 
+    @Override
+    public EffectKind kind() {
+        return EffectKind.SICK;
+    }
+
+    @Override
     public int getRoundsRemaining() {
         return roundsRemaining;
     }

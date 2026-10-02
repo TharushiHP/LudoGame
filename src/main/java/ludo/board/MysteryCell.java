@@ -4,6 +4,11 @@ import ludo.dice.RandomSource;
 
 import java.util.List;
 
+/**
+ * The mystery cell: where it is, how many rounds it stays, and when it relocates.
+ * Queries are side-effect free (Command-Query Separation): {@link #isJustSpawned()} only reads
+ * the "just spawned" flag and {@link #clearJustSpawned()} resets it.
+ */
 public class MysteryCell {
 
     private static final int NO_POSITION = -1;
@@ -80,12 +85,12 @@ public class MysteryCell {
         return roundsRemaining;
     }
 
-    public boolean wasJustSpawned() {
-        if (justSpawned) {
-            justSpawned = false;
-            return true;
-        }
-        return false;
+    public boolean isJustSpawned() {
+        return justSpawned;
+    }
+
+    public void clearJustSpawned() {
+        justSpawned = false;
     }
 
     public String positionLabel() {

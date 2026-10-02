@@ -118,6 +118,13 @@ class PlayerTest {
         assertEquals(PlayerColor.YELLOW, yellowPlayer.getColor());
     }
 
+    @Test
+    void piecesListCannotBeModifiedFromOutside() {
+        List<Piece> pieces = redPlayer.getPieces();
+        assertThrows(UnsupportedOperationException.class, () -> pieces.remove(0));
+        assertThrows(UnsupportedOperationException.class, () -> pieces.add(new Piece(PlayerColor.RED, 5)));
+    }
+
     // Rule T-13: every roll the player makes counts, whichever piece is moved.
     @Test
     void briefingPieceGoesToBaseAfterPlayersThirdConsecutiveThree() {
