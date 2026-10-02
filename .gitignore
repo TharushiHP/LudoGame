@@ -1,0 +1,27 @@
+# Maven build output
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDEs
+.idea/
+*.iml
+out/
+.settings/
+.project
+.classpath
+.factorypath
+bin/
+
+# VS Code: keep shared settings, ignore the rest
+.vscode/*
+!.vscode/settings.json
+
+# Tool-generated logs
+.github/modernize/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
