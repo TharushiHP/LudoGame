@@ -1,2 +1,2 @@
 # Golden-master files are compared byte for byte: never convert their line endings.
-src/test/resources/golden/*.txt text eol=lf
+ludo-server/src/test/resources/golden/*.txt text eol=lf

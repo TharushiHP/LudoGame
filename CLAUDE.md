@@ -14,8 +14,27 @@ University assignment (COMP63038 Clean Coding & Concurrent Programming, Assignme
 - Central COORDINATOR SERVER owns the only authoritative board: dice, rules, move validation, mystery cell, turn order.
 - Four THICK CLIENTS (Red, Green, Yellow, Blue), each on its own machine. Each runs its player behaviour (Strategy pattern) to choose moves, and a Swing GUI. Clients NEVER apply game rules to their own state; they only render snapshots from the server.
 - Optional DATABASE tier (save-state mode) with an in-memory alternative, both behind a GameRepository port.
-- Planned modules: ludo-core, ludo-shared, ludo-server, ludo-client, ludo-testclients as Maven modules, plus database/ for SQL scripts.
-- Clean Architecture dependency rule: ludo-core must never import HTTP, Swing or JDBC classes.
+- Clean Architecture dependency rule: ludo-core must never import HTTP, Swing or JDBC classes. Enforced by DependencyRuleTest (ludo-core and ludo-shared) and PackageCycleTest (no package cycles in ludo-core).
+
+## Modules (Maven multi-module; parent pom.xml, packaging pom)
+| Module | Contents | Depends on |
+|---|---|---|
+| ludo-shared | ludo.shared: PlayerColor, Direction, BoardConstants, PieceLocation, EffectKind, PathMath; ludo.shared.snapshot (GameSnapshot and records); ludo.shared.decision (MoveDecider port, PieceChoice) | nothing |
+| ludo-players | ludo.players: the four MoveStrategy behaviours, StrategyFactory, SnapshotStrategyDecider. Decide from snapshots only | ludo-shared |
+| ludo-core | ludo.board, dice, effect, game, piece, player: the rules and the one authoritative board | ludo-shared (ludo-players at test scope only) |
+| ludo-server | ludo.server.ConsoleSimulation (runnable jar), ludo.output.GameLogger, GoldenMasterTest + golden files | ludo-core, ludo-players |
+| ludo-client | placeholder (ludo.client.ClientApp) | nothing yet |
+| ludo-testclients | placeholder (ludo.testclients.TestClientsApp) | nothing yet |
+| database/ | SQL scripts (not created yet) | |
+
+GameBuilder (core) has no default MoveDecider; the caller must pass one (ConsoleSimulation and core tests pass SnapshotStrategyDecider).
+
+## Commands (Windows: use mvnw.cmd)
+- Build and test everything: `./mvnw clean package` (or `./mvnw test`)
+- Test one module: `./mvnw test -pl ludo-core -am`
+- Golden master only: `./mvnw test -pl ludo-server -am -Dtest=GoldenMasterTest -Dsurefire.failIfNoSpecifiedTests=false`
+- Run the console simulation: `java -jar ludo-server/target/ludo-server.jar --seed=7` (after `package`)
+- Golden files live in ludo-server/src/test/resources/golden. Never regenerate them unless a behaviour change is intended and approved.
 
 ## Consistency (top priority)
 All four players must see the same game at the same time. Mechanisms:
