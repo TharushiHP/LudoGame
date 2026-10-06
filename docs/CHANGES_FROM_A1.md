@@ -100,5 +100,40 @@ Task 2's 100-seed run found 11 games that hit the 500-round cap. Most were **mut
 | Adapter (added in Task 4) | `LocalStrategyDecider` | `ludo-players`: `SnapshotStrategyDecider` |
 | Null Object (added in Task 4) | `NoOpTurnGate` | `ludo-core` (`ludo.game`) |
 
+## Task 6: coordinator server (no rule change)
+
+ludo-core was **not changed**. The golden master (seeds 1–20) still passes byte for byte. A new test, `ServerGameTest.remoteGameLogMatchesTheConsoleGoldenMaster`, plays seed 7 through the real server with four HTTP clients. Every client's collected STATE log is byte-identical to `seed-7.txt` (minus the "Seed:" line). So the remote game is the same game as the console one.
+
+**What was added**
+
+| # | What | Pattern / principle | Why |
+|---|---|---|---|
+| 1 | `ludo.shared.json`: hand-written `JsonWriter` (compact, so canonical), `JsonParser` (recursive descent, rejects malformed input with the position) and `JsonObjects` (typed getters that name the bad field). | (none: no JSON library allowed) | The protocol needs JSON, and only JDK classes are allowed. It lives in ludo-shared so the clients will use the same code. |
+| 2 | `ludo.shared.protocol`: `SnapshotCodec` (fixed field order, colours always Red, Green, Yellow, Blue), `StateHasher` (SHA-256 of the canonical JSON, hex), `EventType`, `RequestType`, `DecisionKind`, the six event records and the four request records (sealed interfaces `ServerEvent` and `ClientRequest`). | Value Object; Single Source of Truth | Server and clients must encode and hash a snapshot identically. Otherwise equal states would give different hashes. |
+| 3 | `GameSession` (one per game) with a bounded `ArrayBlockingQueue` of commands. HTTP threads `offer` a command with a `CompletableFuture` and wait for the reply (504 after 5 s). A full queue gives 503 at once. | Active Object; Producer–Consumer; Command | Only the game thread may change a game. A bounded queue gives back-pressure instead of unbounded memory use. |
+| 4 | `Coordinator` + `CommandLoop`: everything on the game thread `game-<id>`. Each wait (ROLL, DECISION, ACKs, pacing) polls the queue until its condition or deadline. The `requestId → reply` map (idempotency) is here too. | Thread confinement; Idempotent Receiver | One thread gives one total order of events with no locks around game state. A retried request is answered from the map and not applied twice. |
+| 5 | Coordinator states `WaitingForPlayers`, `AwaitingRoll`, `AwaitingDecision`, `AwaitingAcks`, `Pacing`, `Paused`, `GameOver`. By default each rejects a request with 409; each overrides only what it accepts. They depend on a `CoordinatorContext` interface, not on the coordinator. Every transition is logged. | State; Open/Closed; Dependency Inversion | "Is this request valid now?" lives in one small class per state instead of one large switch. |
+| 6 | `RemoteTurnGate` (implements `TurnGate`) and `RemoteMoveDecider` (implements `MoveDecider`). | Adapter / Remote Proxy; Dependency Inversion (the Task 4 ports) | Game calls the same ports as before and does not know the players are remote. |
+| 7 | `BufferingEventListener` collects the game's messages for the next STATE (and echoes them to the console). | Observer (concrete observer) | Clients show the same log the console game prints. |
+| 8 | `Broadcaster`: event-stream list in a `CopyOnWriteArrayList`; all socket writes on one `sse-writer-<id>` thread per game. `EventSink` is the port the HTTP layer implements (`SseSink`). | Dependency Inversion; thread confinement for sockets | A slow or dead client can never block the game thread. The coordinator does not depend on HTTP classes. |
+| 9 | HTTP tier `LudoHttpServer` / `GamesHandler` on `com.sun.net.httpserver`, fixed pool of non-daemon `http-worker-N`. GET /state and GET /games read `volatile` immutable values only. | Separation of tiers | Reads never wait for the game thread. |
+| 10 | `ServerMain` (`--port`, `--turn-delay`, `--move-timeout`), `LudoServer` (composition root, ordered `stop()`), shutdown hook. **The jar's main class is now `ServerMain`.** The console game runs with `java -cp ludo-server.jar ludo.server.ConsoleSimulation --seed=7`. | Composition root | The server tier's jar should start the server. The console game is unchanged. |
+| 11 | Tests: `JsonTest`, `ProtocolTest` (ludo-shared); `ServerGameTest`, `ServerProtocolTest`, `ServerTimeoutTest`, `ServerShutdownTest`, `CoordinatorStateTest`, `GameSessionTest`, `ServerMainTest` (ludo-server). Fake clients use `java.net.http.HttpClient`. | (testing) | They prove the concurrency claims automatically: a full game in lockstep, matching hashes, 409 for wrong/stale requests, idempotent retries, 503 back-pressure, pause/substitution, clean shutdown. |
+
+**Deviations from the original CLAUDE.md plan (CLAUDE.md updated)**
+
+| # | Planned | Now | Why |
+|---|---|---|---|
+| D1 | Ack barrier with `Phaser` | A thread-confined `EnumSet` (`AckBarrier`) | ACKs reach the barrier through the command queue, so only the game thread ever touches it. A Phaser coordinates several threads; here it would only wrap a set that one thread checks off. |
+| D2 | Pacing via `ScheduledExecutorService` | The game thread polls its queue until the turn-delay deadline | A scheduled task would need a second thread to hand the turn back to the game thread. Polling keeps the game thread answering requests during the delay and never sleeps. |
+| D3 | States `AwaitingMove`, "client sends MOVE" | `AwaitingDecision`, "client sends DECISION" | Game asks two kinds of question (which piece; bring a piece out on a six?), sometimes several per roll (Rule 7 fallback). Each gets its own decisionId. |
+| D4 | "Version incremented on every broadcast" (task brief) | Version + 1 on every **STATE** broadcast; SSE event ids are a separate counter | If PAUSED or DECISION_REQUEST also bumped the version, a slow client's still-valid answer would turn stale. The version now means exactly "state changes so far". |
+| D5 | DECISION_REQUEST(colour, decisionId, kind, roll, candidates, version) | It also carries the snapshot | Game asks with the snapshot taken *after* the dice roll, which has not been broadcast as STATE yet. The client strategy needs exactly that snapshot to decide as the console game does. |
+| D6 | Resume after a timeout "when that client reconnects" | Resumes when the missing answer arrives **or** the client reconnects. A reconnect is sent the STATE and the open request at once, then gets a fresh move timeout. | A client that was only slow should not have to reconnect. |
+| D7 | (open) | Substitution after 30 s is **permanent**. The client may still watch and ACK, but its ROLL/DECISION gets 409. | Your decision: simpler, and easy to explain. |
+| D8 | (none) | A STATE whose snapshot is no longer IN_PROGRESS (the final one) needs no ACK | There is no next turn to hold back. |
+| D9 | (none) | Interrupted while waiting for a DECISION: the local strategy answers, the interrupt flag is restored, and the game ends as ABORTED at the next `afterRoll`. | `MoveDecider` cannot throw `InterruptedException`, and core was not to change. |
+
 ## Open issues
 - A1 classes still without a class Javadoc (not touched by Task 5): `Coin`, `Dice`, `RandomSource`, `GameEventListener`, `MoveResult`.
+- Task 6: the server keeps no saved state on shutdown yet; that comes with the database task. Missed events are not replayed after a reconnect: the client gets the current full STATE instead, which is enough because every STATE is complete. Log lines of missed STATEs are therefore not re-sent.

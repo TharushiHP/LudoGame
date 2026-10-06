@@ -19,10 +19,10 @@ University assignment (COMP63038 Clean Coding & Concurrent Programming, Assignme
 ## Modules (Maven multi-module; parent pom.xml, packaging pom)
 | Module | Contents | Depends on |
 |---|---|---|
-| ludo-shared | ludo.shared: PlayerColor, Direction, BoardConstants, PieceLocation, EffectKind, PathMath; ludo.shared.snapshot (GameSnapshot and records); ludo.shared.decision (MoveDecider port, PieceChoice) | nothing |
+| ludo-shared | ludo.shared: PlayerColor, Direction, BoardConstants, PieceLocation, EffectKind, PathMath; ludo.shared.snapshot (GameSnapshot and records); ludo.shared.decision (MoveDecider port, PieceChoice); ludo.shared.json (hand-written JsonWriter/JsonParser/JsonObjects); ludo.shared.protocol (SnapshotCodec, StateHasher, event and request records) | nothing |
 | ludo-players | ludo.players: the four MoveStrategy behaviours, StrategyFactory, SnapshotStrategyDecider. Decide from snapshots only | ludo-shared |
 | ludo-core | ludo.board, dice, effect, game, piece, player: the rules and the one authoritative board | ludo-shared (ludo-players at test scope only) |
-| ludo-server | ludo.server.ConsoleSimulation (runnable jar), ludo.output.GameLogger, GoldenMasterTest + golden files | ludo-core, ludo-players |
+| ludo-server | ludo.server: ServerMain (runnable jar), LudoServer, ConsoleSimulation; ludo.server.config (ServerConfig, ServerLog, NamedThreadFactory); ludo.server.coordinator (GameSession, Coordinator, CommandLoop, Broadcaster, RemoteTurnGate, RemoteMoveDecider, ...); ludo.server.coordinator.state (the 7 coordinator states, AckBarrier, Reply); ludo.server.http (LudoHttpServer, GamesHandler, SseSink); ludo.output.GameLogger; GoldenMasterTest + golden files | ludo-core, ludo-players |
 | ludo-client | placeholder (ludo.client.ClientApp) | nothing yet |
 | ludo-testclients | placeholder (ludo.testclients.TestClientsApp) | nothing yet |
 | database/ | SQL scripts (not created yet) | |
@@ -33,21 +33,24 @@ GameBuilder (core) has no default MoveDecider; the caller must pass one (Console
 - Build and test everything: `./mvnw clean package` (or `./mvnw test`)
 - Test one module: `./mvnw test -pl ludo-core -am`
 - Golden master only: `./mvnw test -pl ludo-server -am -Dtest=GoldenMasterTest -Dsurefire.failIfNoSpecifiedTests=false`
-- Run the console simulation: `java -jar ludo-server/target/ludo-server.jar --seed=7` (after `package`)
+- Run the coordinator server: `java -jar ludo-server/target/ludo-server.jar --port=8080 --turn-delay=500 --move-timeout=10000` (after `package`; all options optional, values in ms)
+- Run the console simulation: `java -cp ludo-server/target/ludo-server.jar ludo.server.ConsoleSimulation --seed=7`
+- Server tests only: `./mvnw test -pl ludo-server -am`
 - Golden files live in ludo-server/src/test/resources/golden. Never regenerate them unless a behaviour change is intended and approved.
 
 ## Consistency (top priority)
 All four players must see the same game at the same time. Mechanisms:
-- One thread per game touches the board (thread confinement), giving one total order of events.
-- Lockstep turn cycle: TURN_START -> client sends ROLL -> server rolls and sends legal moves -> client sends MOVE -> server validates, applies, broadcasts FULL snapshot -> all 4 clients ACK with version + state hash -> paced delay -> next turn.
-- Every state change increments a version. Requests carry turnId + expectedVersion; stale ones get HTTP 409. Requests carry a requestId so retries are idempotent.
-- Ack barrier with java.util.concurrent.Phaser; hashes compared every turn.
-- Server push via Server-Sent Events; reconnect resyncs using Last-Event-ID.
-- Coordinator states (State pattern): WaitingForPlayers, AwaitingRoll, AwaitingMove, AwaitingAcks, Pacing, Paused, GameOver.
-- Pacing via ScheduledExecutorService, configurable delay. Not real-time, but a game should take minutes, not hours.
+- One thread per game (`game-<id>`) touches the board (thread confinement), giving one total order of events. HTTP threads only queue commands (bounded ArrayBlockingQueue, 503 when full) and wait for the game thread's reply.
+- Lockstep cycle, per roll (bonus rolls included): ROLL_REQUEST -> client sends ROLL -> server rolls -> DECISION_REQUEST (with the post-roll snapshot) for each decision -> client sends DECISION -> server validates, applies, broadcasts FULL STATE (version, snapshot, hash, log lines) -> all connected clients ACK with version + state hash -> pacing delay -> next roll.
+- The version goes up by 1 on every STATE broadcast (every state change). ROLL carries turnId + expectedVersion, DECISION carries decisionId + expectedVersion; stale ones get HTTP 409. ROLL/DECISION/ACK carry a requestId: a repeated accepted requestId gets the stored reply and is not applied again.
+- Ack barrier: a thread-confined EnumSet (AckBarrier) owned by the game thread, since ACKs arrive through the queue. (Not a Phaser: only one thread ever touches it.) Hashes (SHA-256 of canonical snapshot JSON, StateHasher) compared every roll; a mismatch re-sends STATE.
+- Server push via Server-Sent Events, ids = event sequence; on (re)connect the client gets the current STATE and any open request at once (Last-Event-ID is logged).
+- Coordinator states (State pattern): WaitingForPlayers, AwaitingRoll, AwaitingDecision, AwaitingAcks, Pacing, Paused, GameOver.
+- Pacing: the game thread polls its queue until the --turn-delay deadline (never Thread.sleep), so it keeps answering requests. Not real-time, but a game should take minutes, not hours.
+- No ROLL/DECISION within --move-timeout: Paused + PAUSED event; resumes when the answer arrives or the client reconnects; after 30 s more the server plays that colour with SnapshotStrategyDecider for the rest of the game (permanent substitution).
 
 ## Threads
-Be explicit about daemon vs non-daemon threads and justify each. Shutdown hook drains queues and saves state.
+Be explicit about daemon vs non-daemon threads and justify each: see docs/THREADS.md (keep it up to date). Shutdown hook (`shutdown-hook`) refuses new requests, interrupts game threads (games end ABORTED, GAME_OVER is sent, queues are drained with 409), closes event streams, then stops the HTTP server. Saving state is added with the database task.
 
 ## Working rules
 - Design patterns and SOLID principles from Assignment 1 must be preserved. Any change, removal or corrected label must be recorded in docs/CHANGES_FROM_A1.md with a reason.
