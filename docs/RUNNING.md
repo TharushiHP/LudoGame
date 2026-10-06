@@ -29,11 +29,11 @@ scripts\start-demo.bat
 
 The script:
 1. builds the jars if they are missing (tests skipped),
-2. starts the server in its own window, "LUDO-T server" (`--turn-delay=500`), and also saves its output to `logs\server.log`,
+2. starts the server in its own window, "LUDO-T server" (`--turn-delay=500 --rematch-delay=10000`), and also saves its output to `logs\server.log`; 10 s after a game ends, the server starts the next one by itself,
 3. waits until `GET http://localhost:8080/health` answers,
 4. creates game 1 with seed 7 (`POST /games {"seed":7}`); it uses the server's default end condition, so it stops when the first player wins,
 5. opens **the game window**, a maximised spectator view of game 1 (it opens first, so it shows the game from the first move),
-6. starts the four players, Red, Green, Yellow and Blue, as separate client applications **without a window** (`--headless`). Each runs in its own minimised console ("LUDO-T Red player" and so on), which prints that player's log.
+6. starts the four players, Red, Green, Yellow and Blue, as separate client applications **without a window** (`--headless`). Each runs in its own minimised console ("LUDO-T Red player" and so on), which prints that player's log. They stay for every next game the server starts and exit by themselves after a GAME_OVER that announces no next game (or when the server is stopped).
 
 It refuses to start if a server is already running on port 8080, because the new game would then not be game 1. To stop the demo, close the game window and the four player consoles, then press Ctrl+C in the server window.
 
@@ -54,13 +54,15 @@ Where to look:
    (Or use *Windows Defender Firewall → Advanced settings → Inbound Rules → New Rule → Port → TCP 8080 → Allow*.) If Windows shows a firewall pop-up the first time Java listens, allow it for **private** networks.
 3. Start the server:
    ```
-   java -jar ludo-server\target\ludo-server.jar --port=8080 --turn-delay=500 --move-timeout=10000
+   java -jar ludo-server\target\ludo-server.jar --port=8080 --turn-delay=500 --move-timeout=10000 --rematch-delay=10000
    ```
    All options are optional (values in ms). The log shows every request, state change and ACK, with the name of the thread that handled it.
 
    `--end-condition=FIRST_WINNER|ALL_PLACES` (not case-sensitive) sets how games end by default:
    - **FIRST_WINNER** (default): the game stops as soon as the first player has all four tokens Home. Only the winner is placed; the others are listed as "Not ranked".
    - **ALL_PLACES**: the game plays on until every place is decided, like the console simulation (Rule 11 says the game *may* continue).
+
+   `--rematch-delay=<ms>` (default **10000**; **0** = off): when a game ends, the server waits this long and then starts the **next game in the same session** by itself, with the same four seats and event streams, a new random seed and the same end condition. Its GAME_OVER says so (`"nextGameInMs":10000`), a `NEW_GAME` event (`gameNumber`, `seed`) comes just before the new game's first STATE, and the version keeps counting up across games, so a request left over from the previous game gets 409. A colour the server took over stays computer-played. `GET /games` and `GET /games/{id}` show the `gameNumber` and the current `seed`. With 0, a session plays one game, as before.
 
 You can create a game here with `curl.exe -X POST -H "Content-Type: application/json" -d "{\"seed\":7}" http://localhost:8080/games`, or from any client's connect window ("New game..."). Add `"endCondition":"ALL_PLACES"` (or `"FIRST_WINNER"`) to the body to override the server's default for that game; an unknown value gets HTTP 400. The reply, `GET /games` and `GET /games/{id}` all include the game's `endCondition`, and the connect window shows it in the **Ends at** column.
 
@@ -139,11 +141,13 @@ One window, like a real Ludo app. It fits the screen (Windows display scaling in
   - a new state arriving mid-move snaps to it at once
 - **Banners** pop up over the board for about 1.5 s on a capture, a mystery teleport, an Alpha/Beta/Gamma effect, a block, a token reaching Home, and a player finishing.
 - **Toasts** appear only for problems: "Reconnecting...", "Waiting for Blue..." (the server paused for that player), "Blue is now played by the computer".
-- **Winner screen:**
-  - a game that ends at the first winner (the default) shows a large **"RED WINS!"** in the winner's colour with the winner's token, and nothing about the other players;
-  - any other ending (ALL_PLACES, stalemate, round limit, server stopped) shows a podium with places 1-3, 4th beneath, and how the game ended.
+- **Winner box:** when a game ends, a box in the style of the banners (but larger) appears over the board:
+  - a game that ends at the first winner (the default) shows the winner's token and **"Red wins!"** in the winner's colour, and nothing about the other players;
+  - any other ending (ALL_PLACES, stalemate, round limit, server stopped) lists the places, each with a small token, and says how the game ended;
+  - if the server will start a next game, a line counts down: **"Next game starts in 8 s"**.
 
-  The window stays open on this screen until you close it; the headless players exit by themselves.
+  The box stays until you close it with the round **×** in its top-right corner (or **Esc**; if the legend is open, the first Esc closes the legend) or until the next game starts. Closing it only hides it: the window is read-only and never sends anything to the server.
+- **Next game:** the server starts it by itself (see `--rematch-delay`). The window then clears the board (every token back in base), shows a short **"Game 2 starting"** toast, and the new game's moves follow. The four players stay connected and play on; nobody has to rejoin.
 
 ### Developer view: F2
 

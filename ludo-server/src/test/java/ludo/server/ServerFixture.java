@@ -40,9 +40,13 @@ final class ServerFixture implements AutoCloseable {
         base = "http://localhost:" + server.port();
     }
 
-    /** Turn delay 0 so a whole game takes seconds; generous timeouts so a slow machine is not "absent". */
+    /**
+     * Turn delay 0 so a whole game takes seconds; generous timeouts so a slow machine is not "absent".
+     * Rematch off: one game per session, exactly as before the automatic next game existed.
+     */
     static ServerConfig fastConfig() {
-        return ServerConfig.defaults().withTurnDelayMs(0).withMoveTimeoutMs(5_000).withSubstituteAfterMs(30_000);
+        return ServerConfig.defaults().withTurnDelayMs(0).withMoveTimeoutMs(5_000).withSubstituteAfterMs(30_000)
+                .withRematchDelayMs(0);
     }
 
     String createGame(long seed) throws Exception {

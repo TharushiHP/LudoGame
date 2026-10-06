@@ -19,6 +19,14 @@ class ServerMainTest {
     }
 
     @Test
+    void parsesTheRematchDelay() {
+        assertEquals(10_000, ServerMain.parse(new String[0]).rematchDelayMs(), "on by default: 10 s");
+        assertEquals(0, ServerMain.parse(new String[] {"--rematch-delay=0"}).rematchDelayMs(), "0 = off");
+        assertEquals(2_500, ServerMain.parse(new String[] {"--rematch-delay=2500"}).rematchDelayMs());
+        assertThrows(IllegalArgumentException.class, () -> ServerMain.parse(new String[] {"--rematch-delay=-1"}));
+    }
+
+    @Test
     void parsesTheEndCondition() {
         assertEquals(EndCondition.ALL_PLACES, ServerMain.parse(new String[] {"--end-condition=ALL_PLACES"}).endCondition());
         assertEquals(EndCondition.FIRST_WINNER, ServerMain.parse(new String[] {"--end-condition=first_winner"}).endCondition());

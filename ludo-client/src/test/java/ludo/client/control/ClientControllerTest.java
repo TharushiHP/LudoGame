@@ -17,6 +17,7 @@ import ludo.shared.protocol.DecisionReply;
 import ludo.shared.protocol.DecisionRequest;
 import ludo.shared.protocol.GameOverEvent;
 import ludo.shared.protocol.JoinRequest;
+import ludo.shared.protocol.NewGameEvent;
 import ludo.shared.protocol.PausedEvent;
 import ludo.shared.protocol.ResumedEvent;
 import ludo.shared.protocol.RollCommand;
@@ -217,6 +218,29 @@ class ClientControllerTest {
         assertTrue(view.warnings.stream().anyMatch(w -> w.contains("server now plays Blue")));
     }
 
+    @Test
+    void aGameOverWithANextGameKeepsTheControllerRunningUntilTheLastOne() throws Exception {
+        start(Identity.player(PlayerColor.RED, "A"));
+        controller.onEvent(new GameOverEvent(GameStatus.FINISHED, Map.of(PlayerColor.RED, 1), 10_000));
+        assertFalse(controller.awaitGameOver(300), "a next game follows: the player stays");
+
+        controller.onEvent(new NewGameEvent(2, 99));
+        controller.onEvent(new RollRequest(PlayerColor.RED, 50, 120));
+        RollCommand roll = gateway.await(RollCommand.class);
+        assertEquals(50, roll.turnId(), "still answering after the first GAME_OVER");
+
+        controller.onEvent(new GameOverEvent(GameStatus.FINISHED, Map.of(PlayerColor.GREEN, 1)));
+        assertTrue(controller.awaitGameOver(2_000), "the last GAME_OVER ends the session");
+        assertEquals(List.of("GAME_OVER", "NEW_GAME 2", "GAME_OVER"), view.lifecycle);
+    }
+
+    @Test
+    void aStreamClosedForGoodEndsTheSession() throws Exception {
+        start(Identity.player(PlayerColor.RED, "A"));
+        controller.onConnection(ConnectionState.CLOSED);
+        assertTrue(controller.awaitGameOver(1_000));
+    }
+
     // --- test data ---
 
     private static StateEvent state(long version, GameSnapshot snapshot) {
@@ -340,6 +364,11 @@ class ClientControllerTest {
         @Override
         public void showGameOver(GameOverEvent gameOver) {
             lifecycle.add("GAME_OVER");
+        }
+
+        @Override
+        public void showNewGame(NewGameEvent newGame) {
+            lifecycle.add("NEW_GAME " + newGame.gameNumber());
         }
 
         @Override

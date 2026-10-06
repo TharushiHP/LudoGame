@@ -44,7 +44,12 @@ final class PlayerSeats {
         return joined.get(colour).triesOtherPiecesWhenBlocked();
     }
 
-    /** Permanent: the server plays this colour until the game ends. */
+    /** The colours the server plays (a copy, for logs). */
+    Set<PlayerColor> substitutedColours() {
+        return EnumSet.copyOf(substituted.isEmpty() ? EnumSet.noneOf(PlayerColor.class) : substituted);
+    }
+
+    /** Permanent: the server plays this colour until the session ends, in every next game too. */
     void substitute(PlayerColor colour) {
         substituted.add(colour);
     }

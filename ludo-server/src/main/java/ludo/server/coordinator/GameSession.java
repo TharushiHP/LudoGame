@@ -23,7 +23,8 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * One game on the server, as seen by other threads (Active Object). It owns the game's command
  * queue and its game thread, {@code game-<id>}, which is the only thread that ever touches the
- * Game (see {@link Coordinator}).
+ * Game (see {@link Coordinator}). With rematch on, the same session plays one game after another
+ * (same seats and event streams); {@link #gameNumber()} and {@link #seed()} describe the current one.
  * <ul>
  *   <li>Producer-consumer: HTTP threads call {@link #request}, which wraps the request with a
  *       CompletableFuture, puts it on a bounded ArrayBlockingQueue and waits for the reply. When
@@ -36,7 +37,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class GameSession {
 
     private final String id;
-    private final long seed;
+    private volatile long seed;
+    private volatile int gameNumber = 1;
     private final long turnDelayMs;
     private final EndCondition endCondition;
     private final ServerConfig config;
@@ -151,8 +153,14 @@ public final class GameSession {
         return id;
     }
 
+    /** The current game's seed (a new one for every next game of the session). */
     public long seed() {
         return seed;
+    }
+
+    /** 1 for the session's first game, then 2, 3, ... (the server starts each next game by itself). */
+    public int gameNumber() {
+        return gameNumber;
     }
 
     public long turnDelayMs() {
@@ -220,6 +228,12 @@ public final class GameSession {
         taken = Set.copyOf(colours);
     }
 
+    void publishNextGame(int number, long newSeed) {
+        seed = newSeed;
+        gameNumber = number;
+    }
+
+    /** After the session's last game: no more requests, no more event streams. */
     void markClosed(GameOverEvent gameOver) {
         result = gameOver;
         closed = true;

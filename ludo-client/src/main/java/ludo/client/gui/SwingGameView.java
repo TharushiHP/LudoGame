@@ -3,6 +3,7 @@ package ludo.client.gui;
 import ludo.client.control.GameView;
 import ludo.client.net.ConnectionState;
 import ludo.shared.protocol.GameOverEvent;
+import ludo.shared.protocol.NewGameEvent;
 import ludo.shared.protocol.PausedEvent;
 import ludo.shared.protocol.ResumedEvent;
 import ludo.shared.protocol.ServerEvent;
@@ -63,6 +64,11 @@ public final class SwingGameView implements GameView {
     @Override
     public void showGameOver(GameOverEvent gameOver) {
         SwingUtilities.invokeLater(() -> window.showGameOver(gameOver));
+    }
+
+    @Override
+    public void showNewGame(NewGameEvent newGame) {
+        SwingUtilities.invokeLater(() -> window.showNewGame(newGame));
     }
 
     @Override

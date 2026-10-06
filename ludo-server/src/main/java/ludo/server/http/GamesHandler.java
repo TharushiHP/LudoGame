@@ -34,7 +34,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * <pre>
  * POST /games                    {seed?, turnDelayMs?, endCondition?}  -> 201 {gameId, seed, turnDelayMs, endCondition}
  * GET  /games                                           -> {games: [...]}
- * GET  /games/{id}                                      -> one game's summary (incl. taken colours)
+ * GET  /games/{id}                                      -> one game's summary (incl. taken colours,
+ *                                                          gameNumber and the current seed)
  * POST /games/{id}/join          {colour, clientName, triesOtherPiecesWhenBlocked}
  * POST /games/{id}/roll          {colour, turnId, expectedVersion, requestId}
  * POST /games/{id}/decision      {colour, decisionId, expectedVersion, requestId, piece | fromBase, memo?}
@@ -133,6 +134,7 @@ final class GamesHandler implements HttpHandler {
         GameSession session = registry.create(seed, delay, endCondition);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("gameId", session.id());
+        body.put("gameNumber", session.gameNumber());
         body.put("seed", session.seed());
         body.put("turnDelayMs", session.turnDelayMs());
         body.put("endCondition", session.endCondition().name());
@@ -196,7 +198,8 @@ final class GamesHandler implements HttpHandler {
             if (session.taken().contains(colour))
                 taken.add(colour.name());
         json.put("taken", taken);
-        json.put("seed", session.seed());
+        json.put("gameNumber", session.gameNumber());
+        json.put("seed", session.seed()); // the current game's seed
         json.put("turnDelayMs", session.turnDelayMs());
         json.put("endCondition", session.endCondition().name());
         return json;

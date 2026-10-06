@@ -2,6 +2,7 @@ package ludo.client.control;
 
 import ludo.client.net.ConnectionState;
 import ludo.shared.protocol.GameOverEvent;
+import ludo.shared.protocol.NewGameEvent;
 import ludo.shared.protocol.PausedEvent;
 import ludo.shared.protocol.ResumedEvent;
 import ludo.shared.protocol.ServerEvent;
@@ -33,6 +34,9 @@ public interface GameView {
     void showResumed(ResumedEvent resumed);
 
     void showGameOver(GameOverEvent gameOver);
+
+    /** The server starts the next game of the session (same seats): reset the screen for it. */
+    void showNewGame(NewGameEvent newGame);
 
     void showConnection(ConnectionState state);
 

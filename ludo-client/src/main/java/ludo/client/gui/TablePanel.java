@@ -4,11 +4,13 @@ import ludo.client.control.Identity;
 import ludo.client.gui.BoardLayout.Spot;
 import ludo.client.gui.model.Banner;
 import ludo.client.gui.model.DiceFaces;
+import ludo.client.gui.model.Ending;
 import ludo.client.gui.model.PieceChange;
 import ludo.client.gui.model.Place;
 import ludo.client.gui.model.TableLayout;
 import ludo.client.gui.model.TableLayout.Rect;
 import ludo.client.gui.model.TokenText;
+import ludo.client.gui.model.WinnerBox;
 import ludo.shared.BoardConstants;
 import ludo.shared.Direction;
 import ludo.shared.EffectKind;
@@ -52,9 +54,10 @@ import java.util.stream.Collectors;
 
 /**
  * The game table: the Figure 1 board as large as the window allows, a player box with a dice
- * outside each corner, the tokens, and the banners, toasts and winner screen on top, plus a round
- * "i" button that opens the symbol legend ({@link LegendOverlay}). Everything is drawn with Java2D
- * and scales with the window ({@link TableLayout}).
+ * outside each corner, the tokens, and the banners, toasts and winner box on top, plus a round
+ * "i" button that opens the symbol legend ({@link LegendOverlay}). The winner box
+ * ({@link WinnerBoxPainter}) stays until its "×" or Esc closes it or the next game starts.
+ * Everything is drawn with Java2D and scales with the window ({@link TableLayout}).
  * <p>
  * {@link #apply} sets the new snapshot at once (that is what the controller waits for before it
  * ACKs); in the spectator window the {@link Animator} then shows how the tokens got there.
@@ -81,6 +84,9 @@ final class TablePanel extends JComponent {
     private final Set<PlayerColor> substituted = EnumSet.noneOf(PlayerColor.class);
     private GameOverEvent gameOver;
     private long gameOverAt;
+    private boolean winnerBoxOpen;
+    private boolean closeHover;
+    private long nextGameAt;            // when the announced next game starts (ms), 0 = none
 
     private BufferedImage boardImage;
     private double boardImageKey;
@@ -108,10 +114,12 @@ final class TablePanel extends JComponent {
 
             @Override
             public void mouseMoved(MouseEvent e) {
-                boolean over = onInfo(e.getX(), e.getY());
-                if (over != infoHover) {
-                    infoHover = over;
-                    setCursor(Cursor.getPredefinedCursor(over ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
+                boolean overInfo = onInfo(e.getX(), e.getY());
+                boolean overClose = onWinnerClose(e.getX(), e.getY());
+                if (overInfo != infoHover || overClose != closeHover) {
+                    infoHover = overInfo;
+                    closeHover = overClose;
+                    setCursor(Cursor.getPredefinedCursor(overInfo || overClose ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
                     repaint();
                 }
             }
@@ -120,16 +128,55 @@ final class TablePanel extends JComponent {
         addMouseMotionListener(mouse);
     }
 
-    // --- the "i" button and the symbol legend (EDT) ---
+    // --- the "i" button, the symbol legend and the winner box's close button (EDT) ---
 
-    /** A click on the "i" button opens the legend; any click while it is open closes it. */
+    /**
+     * A click on the "i" button opens the legend; any click while it is open closes it. Otherwise a
+     * click on the winner box's "×" closes the box. Purely local: nothing is sent to the server.
+     */
     private void clicked(double x, double y) {
         if (legendOpen)
             closeLegend();
         else if (onInfo(x, y)) {
             legendOpen = true;
             repaint();
+        } else if (onWinnerClose(x, y)) {
+            closeWinnerBox();
         }
+    }
+
+    /** Esc: closes the legend if it is open, otherwise the winner box. */
+    void escape() {
+        if (legendOpen)
+            closeLegend();
+        else
+            closeWinnerBox();
+    }
+
+    private boolean winnerBoxShown() {
+        return gameOver != null && winnerBoxOpen && table != null;
+    }
+
+    private boolean onWinnerClose(double x, double y) {
+        return winnerBoxShown() && winnerBox().onClose(x, y);
+    }
+
+    private WinnerBox winnerBox() {
+        return WinnerBox.of(table.board(), Ending.of(gameOver).isFirstWinner());
+    }
+
+    /** Hides the winner box; the window stays read-only (a spectator never sends anything). */
+    void closeWinnerBox() {
+        if (winnerBoxOpen) {
+            winnerBoxOpen = false;
+            closeHover = false;
+            setCursor(Cursor.getDefaultCursor());
+            repaint();
+        }
+    }
+
+    boolean winnerBoxOpen() {
+        return gameOver != null && winnerBoxOpen;
     }
 
     private boolean onInfo(double x, double y) {
@@ -187,11 +234,40 @@ final class TablePanel extends JComponent {
         substituted.add(colour);
     }
 
+    /** Opens the winner box; if the server announced a next game, the box counts down to it. */
     void gameOver(GameOverEvent over) {
         gameOver = over;
         gameOverAt = System.currentTimeMillis();
+        winnerBoxOpen = true;
+        nextGameAt = over.hasNextGame() ? gameOverAt + over.nextGameInMs() : 0;
         requested = null;
         overlays.clear("players");
+    }
+
+    /**
+     * NEW_GAME: the server starts the next game with the same seats. The winner box closes, old
+     * banners go, and every token is shown in base until the new game's first STATE arrives.
+     * Substituted colours stay marked: the server keeps playing them.
+     */
+    void newGame() {
+        gameOver = null;
+        winnerBoxOpen = false;
+        closeHover = false;
+        nextGameAt = 0;
+        snapshot = null;
+        requested = null;
+        lastRoller = null;
+        tumbleFaces = null;
+        dice.clear();
+        animator.snap();
+        overlays.clearBanners();
+        setCursor(Cursor.getDefaultCursor());
+        repaint();
+    }
+
+    /** For tests: the GAME_OVER being shown, null during a game. */
+    GameOverEvent gameOver() {
+        return gameOver;
     }
 
     /** The player whose box glows: the one still animating its move, else the one the server waits for. */
@@ -239,8 +315,9 @@ final class TablePanel extends JComponent {
         for (PlayerColor colour : PlayerColor.values())
             paintBox(g, colour, table.box(colour), colour == active, now);
         overlays.paint(g, board, now);
-        if (gameOver != null && !animator.busy(now))
-            WinnerOverlay.paint(g, w, h, board, gameOver, now - gameOverAt);
+        if (winnerBoxShown() && !animator.busy(now))
+            WinnerBoxPainter.paint(g, board, gameOver, now - gameOverAt,
+                    nextGameAt == 0 ? -1 : Math.max(0, nextGameAt - now), closeHover);
         if (legendOpen)
             LegendOverlay.paint(g, w, h, board, now);
         paintInfoButton(g, table.info());
@@ -467,6 +544,8 @@ final class TablePanel extends JComponent {
             return null;
         if (onInfo(e.getX(), e.getY()))
             return "What the symbols mean";
+        if (onWinnerClose(e.getX(), e.getY()))
+            return "Close (Esc)";
         for (int i = hits.size() - 1; i >= 0; i--)
             if (hits.get(i).area().contains(e.getX(), e.getY()))
                 return hits.get(i).text();

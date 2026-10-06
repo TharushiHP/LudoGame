@@ -17,6 +17,7 @@ import ludo.shared.PlayerColor;
 import ludo.shared.protocol.EventType;
 import ludo.shared.protocol.GameOverEvent;
 import ludo.shared.protocol.JoinRequest;
+import ludo.shared.protocol.NewGameEvent;
 import ludo.shared.protocol.PausedEvent;
 import ludo.shared.protocol.ResumedEvent;
 import ludo.shared.protocol.ServerEvent;
@@ -28,6 +29,7 @@ import ludo.shared.snapshot.GameStatus;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -42,7 +44,10 @@ import java.util.function.BooleanSupplier;
  * <p>
  * Lifecycle: WaitingForPlayers until all four colours have joined; then {@code Game.run()}, which
  * calls back into {@link RemoteTurnGate} and {@link RemoteMoveDecider} for every roll and decision;
- * then a final STATE and GAME_OVER, and GameOver.
+ * then a final STATE and GAME_OVER, and GameOver. With rematch on ({@code --rematch-delay}), the
+ * GAME_OVER announces the next game; after the delay the same thread broadcasts NEW_GAME and plays
+ * a new Game with a new seed, keeping the seats (and substitutions), the event streams, the version,
+ * the turn and decision ids, so a request from the previous game is always stale (409).
  */
 final class Coordinator implements CoordinatorContext {
 
@@ -59,6 +64,10 @@ final class Coordinator implements CoordinatorContext {
     private long turnId;
     private long decisionId;
     private ServerEvent pendingRequest;
+    /** Between two games (rematch on): the GAME_OVER that announced the next game, and when it starts. */
+    private GameOverEvent betweenGames;
+    private long nextGameAt;
+    private final Random seeds = new Random();
 
     Coordinator(GameSession session, BlockingQueue<Command> queue, Broadcaster broadcaster) {
         this.session = session;
@@ -69,22 +78,27 @@ final class Coordinator implements CoordinatorContext {
         this.loop = new CommandLoop(queue, log, this, seats, this::onConnected, this::onLost, session::publishStateName);
     }
 
-    /** The game thread's whole life. */
+    /**
+     * The game thread's whole life: wait for four players, then play. With rematch on, every game
+     * that ends normally is followed, after the rematch delay, by the next one on this same thread,
+     * with the same seats and event streams; the version keeps counting up across games.
+     */
     void run() {
         GameStatus status = GameStatus.ABORTED;
         try {
             loop.enter(new WaitingForPlayers());
             loop.awaitForever(seats::isFull);
             log.log("all four colours joined; game " + session.id() + " starts with seed " + session.seed());
-            game = new GameBuilder()
-                    .withSeed(session.seed())
-                    .withEndCondition(session.endCondition())
-                    .withMoveDecider(new RemoteMoveDecider(this))
-                    .withTurnGate(new RemoteTurnGate(this))
-                    .withListener(gameLog)
-                    .build();
-            game.run();
-            status = game.snapshot().status();
+            while (true) {
+                status = playOneGame();
+                if (config.rematchDelayMs() <= 0)
+                    break;
+                announceGameOver(status);
+                status = GameStatus.ABORTED; // a shutdown during the wait ends the session as ABORTED
+                game = null;                 // ...without sending the old game's final state again
+                loop.awaitUntil(() -> false, nextGameAt);
+                startNextGame();
+            }
         } catch (InterruptedException e) {
             log.log("stopped while waiting for players");
         } catch (RuntimeException e) {
@@ -93,6 +107,48 @@ final class Coordinator implements CoordinatorContext {
         } finally {
             finish(status);
         }
+    }
+
+    /** One game from the first roll to the end, with the current seed. */
+    private GameStatus playOneGame() throws InterruptedException {
+        game = new GameBuilder()
+                .withSeed(session.seed())
+                .withEndCondition(session.endCondition())
+                .withMoveDecider(new RemoteMoveDecider(this))
+                .withTurnGate(new RemoteTurnGate(this))
+                .withListener(gameLog)
+                .build();
+        game.run();
+        return game.snapshot().status();
+    }
+
+    /**
+     * Rematch on: the final STATE (no ACK needed), then GAME_OVER announcing the next game. The
+     * event streams stay open; the coordinator waits in GameOver, which answers every request with 409.
+     */
+    private void announceGameOver(GameStatus status) {
+        GameSnapshot last = game.snapshot();
+        publishState(last);
+        nextGameAt = deadline(config.rematchDelayMs());
+        betweenGames = new GameOverEvent(status, last.finishPositions(), config.rematchDelayMs());
+        broadcaster.broadcast(betweenGames);
+        loop.enter(new GameOver(status));
+        log.log("game " + session.id() + " #" + session.gameNumber() + " over: " + status
+                + "; the next game starts in " + config.rematchDelayMs() + " ms");
+    }
+
+    /** A new seed and game number, NEW_GAME to everyone, and a clean slate for the per-game fields. */
+    private void startNextGame() {
+        int number = session.gameNumber() + 1;
+        long seed = seeds.nextLong();
+        session.publishNextGame(number, seed);
+        betweenGames = null;
+        firstStateSent = false;
+        connectedSincePause.clear();
+        pendingRequest = null;
+        log.log("game " + session.id() + " #" + number + " starts with seed " + seed + " (same seats; "
+                + "substituted: " + seats.substitutedColours() + ")");
+        broadcaster.broadcast(new NewGameEvent(number, seed));
     }
 
     // --- operations used by RemoteTurnGate and RemoteMoveDecider ---
@@ -248,6 +304,10 @@ final class Coordinator implements CoordinatorContext {
             broadcaster.sendTo(sink, new StateEvent(latest.version(), latest.snapshot(), latest.hash(), List.of()));
         if (pendingRequest != null)
             broadcaster.sendTo(sink, pendingRequest);
+        if (betweenGames != null) {
+            long left = Math.max(1, TimeUnit.NANOSECONDS.toMillis(nextGameAt - System.nanoTime()));
+            broadcaster.sendTo(sink, new GameOverEvent(betweenGames.status(), betweenGames.finishPositions(), left));
+        }
     }
 
     private void onLost(EventSink sink) {

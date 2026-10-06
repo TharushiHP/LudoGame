@@ -45,7 +45,10 @@ public final class ClientMain {
         // main ends here; the Event Dispatch Thread (non-daemon) keeps the GUI client running.
     }
 
-    /** Headless: main waits for GAME_OVER, then the JVM exits (all client threads are daemons). */
+    /**
+     * Headless: main waits for the session's last GAME_OVER (one without a next game), so the player
+     * stays for every next game the server starts; then the JVM exits (all client threads are daemons).
+     */
     private static void runHeadless(ClientOptions options) throws InterruptedException {
         ClientSession session = new ClientSession(options.server(), options.gameId(), options.identity(),
                 new ConsoleGameView(System.out, options.identity()));

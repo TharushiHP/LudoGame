@@ -4,6 +4,7 @@ import ludo.client.control.GameView;
 import ludo.client.control.Identity;
 import ludo.client.net.ConnectionState;
 import ludo.shared.protocol.GameOverEvent;
+import ludo.shared.protocol.NewGameEvent;
 import ludo.shared.protocol.PausedEvent;
 import ludo.shared.protocol.ResumedEvent;
 import ludo.shared.protocol.ServerEvent;
@@ -52,7 +53,13 @@ public final class ConsoleGameView implements GameView {
 
     @Override
     public synchronized void showGameOver(GameOverEvent gameOver) {
-        out.println(prefix + "Game over (" + gameOver.status() + "): " + gameOver.finishPositions());
+        out.println(prefix + "Game over (" + gameOver.status() + "): " + gameOver.finishPositions()
+                + (gameOver.hasNextGame() ? "; next game in " + Math.round(gameOver.nextGameInMs() / 1000.0) + " s" : ""));
+    }
+
+    @Override
+    public synchronized void showNewGame(NewGameEvent newGame) {
+        out.println(prefix + "=== Game " + newGame.gameNumber() + " (seed " + newGame.seed() + ") ===");
     }
 
     @Override

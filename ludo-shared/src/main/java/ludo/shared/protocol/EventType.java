@@ -15,6 +15,8 @@ public enum EventType {
     PAUSED,
     /** The game continues (the client answered, or the server now plays that colour). */
     RESUMED,
-    /** The game has ended; no more events follow. */
-    GAME_OVER
+    /** The game has ended. No more events follow unless it announces a next game (nextGameInMs &gt; 0). */
+    GAME_OVER,
+    /** The next game of the same session starts (same seats and streams, new seed). */
+    NEW_GAME
 }

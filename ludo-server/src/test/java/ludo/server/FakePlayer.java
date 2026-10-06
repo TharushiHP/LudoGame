@@ -60,6 +60,8 @@ final class FakePlayer {
     final List<Integer> ackStatuses = Collections.synchronizedList(new ArrayList<>());
     final CountDownLatch gameOver = new CountDownLatch(1);
     volatile GameOverEvent result;
+    /** Every event in arrival order (never consumed, unlike {@link #events}). */
+    final List<ServerEvent> seen = Collections.synchronizedList(new ArrayList<>());
 
     private final ServerFixture fixture;
     private final String gameId;
@@ -110,6 +112,24 @@ final class FakePlayer {
             if (type.isInstance(event) && filter.test(type.cast(event)))
                 return type.cast(event);
         }
+    }
+
+    /** The events of one type seen so far, in arrival order. */
+    <T extends ServerEvent> List<T> seen(Class<T> type) {
+        synchronized (seen) {
+            return seen.stream().filter(type::isInstance).map(type::cast).toList();
+        }
+    }
+
+    /** Waits until {@code n} GAME_OVERs have arrived (rematch: one per game). */
+    boolean awaitGameOvers(int n, long timeoutMs) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        while (seen(GameOverEvent.class).size() < n) {
+            if (System.nanoTime() > deadline)
+                return false;
+            Thread.sleep(20); // test pacing only; the server itself never sleeps
+        }
+        return true;
     }
 
     // --- protocol actions, also used directly by tests ---
@@ -165,6 +185,7 @@ final class FakePlayer {
 
     private void handle(ServerEvent event) throws Exception {
         events.add(event);
+        seen.add(event);
         if (event instanceof StateEvent state) {
             onState(state);
         } else if (event instanceof RollRequest request && request.colour() == colour && mode == Mode.AUTO) {

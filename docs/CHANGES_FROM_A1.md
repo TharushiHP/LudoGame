@@ -215,6 +215,31 @@ Animation uses a `javax.swing.Timer`, so its work runs on the Event Dispatch Thr
 | ludo-client: `GameSummary.endCondition` (missing = ALL_PLACES) and the connect window's **Ends at** column; `TableLayout.info()`; `LegendOverlay`; `Ending`; the Esc key binding in `GameWindow` | Humble object: `TableLayout` and `Ending` are pure and tested, the Swing classes only draw |
 | Tests: `EndConditionTest` (core), `ServerEndConditionTest` and a `ServerMainTest` case (server), `EndingTest`, `TableLayoutTest` (info button fits at every size), `TablePanelTest` (legend opens/closes, colour-only tooltips, both winner screens), `HttpServerGatewayTest` (endCondition read) | |
 
+## Task 10: winner box and automatic next game
+
+**Not changed:** ludo-core, `ConsoleSimulation`, the golden master, the rules, the lockstep cycle (ROLL → DECISION → STATE → ACK), the ACK timing and the threads. The coordinator still has its 7 states.
+
+**Why**
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | The full-screen winner overlay became a **winner box** in the banner style: "Red wins!" for a first-winner ending, the places otherwise, and a countdown when a next game is announced. A round **×** (or Esc) closes it. No dimming, no fade-out. | The old overlay covered the whole window and could not be dismissed, so the final board could not be inspected. A box in the banners' style reads as part of the same game. |
+| 2 | The **server**, not the spectator, starts the next game (`--rematch-delay`, default 10 s). The game thread waits in `GameOver` (polling its queue, never sleeping), then broadcasts `NEW_GAME` and runs a new `Game` with a new seed in the **same** `GameSession`: same seats, same event streams, same end condition. | The spectator is read-only by design: it never sends ROLL, DECISION or ACK, and closing the box only hides it. If a window could start a game, one client would decide for all four, and windows that never ACK would gain a way to change the game. The server owns the game's lifecycle, so all four players stay in step, and nobody has to reconnect or rejoin. |
+| 3 | The **version never resets**; neither do `turnId` and `decisionId`. They keep counting up across games. | A ROLL, DECISION or ACK left over from the previous game still names an old version or id, so the existing checks reject it with 409. If the counters restarted, a late request from game 1 could match a fresh request in game 2. The ACK barrier also never sees two games with the same version. |
+| 4 | Substitutions are kept: a colour the server took over stays computer-played in every next game. | The client that stopped answering has not come back, so waiting for it again would only pause the next game for the move timeout. |
+| 5 | `GameOverEvent` gained `nextGameInMs` (a missing field reads as 0, so an older client still works), and a new `NewGameEvent(gameNumber, seed)` was added. Clients stop only at a GAME_OVER without a next game, so headless players stay for every game. | A GAME_OVER now has to say whether the stream stays open. NEW_GAME lets a window reset the board at the right moment, just before the new game's first STATE. |
+| 6 | **Rematch is off in the tests**: `ServerFixture.fastConfig()` sets `--rematch-delay` 0. Only the new `ServerRematchTest` turns it on. | Every existing test (the golden-master comparison of a remote game, lockstep, timeouts, shutdown) then runs exactly as before, so the earlier evidence is unchanged. The new behaviour is proven separately. |
+
+**What was added or removed**
+
+| What | Pattern / principle |
+|---|---|
+| ludo-shared: `GameOverEvent.nextGameInMs` (+ the old 2-argument constructor), `NewGameEvent`, `EventType.NEW_GAME` | Value Objects; the sealed `ServerEvent` keeps the event set closed |
+| ludo-server: `ServerConfig.rematchDelayMs`, `ServerMain --rematch-delay`; `Coordinator.run` loops over `playOneGame` / `announceGameOver` / `startNextGame`; `GameSession.gameNumber` and the current `seed` (volatile); `GamesHandler` shows `gameNumber`; a reconnecting client during the wait gets the GAME_OVER again with the time left | Thread confinement unchanged: everything still runs on `game-<id>`; State pattern reused (`GameOver` during the wait, no new state) |
+| ludo-client: `GameView.showNewGame` (port); `ClientController` and `EventStreamListener` stop only at the session's last GAME_OVER; `TablePanel.newGame`/`escape`/`closeWinnerBox`; pure `WinnerBox` (geometry and close-button hit test); `WinnerBoxPainter` | Dependency Inversion (port); humble object (geometry tested without Swing) |
+| Removed: `WinnerOverlay` (replaced by `WinnerBoxPainter`) | |
+| Tests: `ServerRematchTest` (two games in one session; a stale ROLL gets 409; a substitution carries over; shutdown during the wait; rematch off), `ServerMainTest`, `ProtocolTest`, `WinnerBoxTest`, `TablePanelTest` (× and Esc, NEW_GAME reset), `ClientControllerTest`, `EventStreamListenerTest` | |
+
 ## Open issues
 - A1 classes still without a class Javadoc (not touched by Task 5): `Coin`, `Dice`, `RandomSource`, `GameEventListener`, `MoveResult`.
 - Task 6: the server keeps no saved state on shutdown yet; that comes with the database task. Missed events are not replayed after a reconnect: the client gets the current full STATE instead, which is enough because every STATE is complete. Log lines of missed STATEs are therefore not re-sent.

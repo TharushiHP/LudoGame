@@ -1,7 +1,8 @@
 @echo off
 rem LUDO-T demo on one PC: the coordinator server plus the four thick clients.
 rem   1. builds the jars if they are missing
-rem   2. starts the server in its own window (output also saved to logs\server.log)
+rem   2. starts the server in its own window (output also saved to logs\server.log); 10 s after
+rem      a game ends it starts the next one by itself (same four players, new seed)
 rem   3. waits until GET /health answers
 rem   4. creates game 1 with seed 7
 rem   5. opens the game window (spectator), then starts the four players headless
@@ -36,7 +37,7 @@ if errorlevel 1 (
 :start_server
 if not exist logs mkdir logs
 echo Starting the coordinator server on port %PORT%...
-start "LUDO-T server" powershell -NoProfile -NoExit -Command "java -jar %SERVER_JAR% --port=%PORT% --turn-delay=500 | Tee-Object -FilePath logs\server.log"
+start "LUDO-T server" powershell -NoProfile -NoExit -Command "java -jar %SERVER_JAR% --port=%PORT% --turn-delay=500 --rematch-delay=10000 | Tee-Object -FilePath logs\server.log"
 
 rem Poll /health once a second, for at most 30 s (ping is used as the delay: it also works without a console).
 set TRIES=0

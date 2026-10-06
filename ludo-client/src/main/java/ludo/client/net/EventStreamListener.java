@@ -2,6 +2,7 @@ package ludo.client.net;
 
 import ludo.shared.json.JsonParser;
 import ludo.shared.protocol.EventType;
+import ludo.shared.protocol.GameOverEvent;
 import ludo.shared.protocol.ServerEvent;
 
 import java.io.IOException;
@@ -22,7 +23,7 @@ import java.util.stream.Stream;
  * When the stream ends or fails, it reconnects with a Last-Event-ID header, waiting 0.5, 1, 2, 4,
  * then 5 s between attempts (exponential backoff, max 5 s; reset after a successful connect). The
  * server answers a reconnect with the current STATE and any open request, so the client catches up.
- * It stops for good after GAME_OVER or {@link #close()}.
+ * It stops for good after the session's last GAME_OVER (one without a next game) or {@link #close()}.
  */
 public final class EventStreamListener {
 
@@ -122,7 +123,10 @@ public final class EventStreamListener {
         return builder.build();
     }
 
-    /** Reads frames until the stream ends. True if GAME_OVER arrived (then there is no reconnect). */
+    /**
+     * Reads frames until the stream ends. True if a GAME_OVER without a next game arrived (then there
+     * is no reconnect); after a GAME_OVER that announces a next game the same stream keeps going.
+     */
     private boolean read(Iterator<String> lines) {
         while (!closed && lines.hasNext()) {
             SseFrame frame = parser.accept(lines.next());
@@ -136,7 +140,7 @@ public final class EventStreamListener {
                 continue;
             }
             callback.onEvent(event);
-            if (event.type() == EventType.GAME_OVER)
+            if (event instanceof GameOverEvent over && !over.hasNextGame())
                 return true;
         }
         return false;

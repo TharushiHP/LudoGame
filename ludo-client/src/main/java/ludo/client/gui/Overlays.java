@@ -57,6 +57,12 @@ final class Overlays {
             queue.removeFirst(); // old news: the newest moments matter more
     }
 
+    /** Drops the banner on screen and any waiting ones (a new game starts). */
+    void clearBanners() {
+        queue.clear();
+        current = null;
+    }
+
     // --- toasts ---
 
     /** A toast that stays until {@link #clear(String)} with the same key. */

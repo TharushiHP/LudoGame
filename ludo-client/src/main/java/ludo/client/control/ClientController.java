@@ -13,6 +13,7 @@ import ludo.shared.protocol.DecisionReply;
 import ludo.shared.protocol.DecisionRequest;
 import ludo.shared.protocol.GameOverEvent;
 import ludo.shared.protocol.JoinRequest;
+import ludo.shared.protocol.NewGameEvent;
 import ludo.shared.protocol.PausedEvent;
 import ludo.shared.protocol.ResumedEvent;
 import ludo.shared.protocol.RollCommand;
@@ -48,6 +49,8 @@ import java.util.concurrent.TimeoutException;
  *   <li>ROLL_REQUEST / DECISION_REQUEST for this colour: send ROLL / run the strategy and send
  *       DECISION (with Blue's memo). For other colours: only shown.</li>
  *   <li>PAUSED, RESUMED, GAME_OVER: shown.</li>
+ *   <li>NEW_GAME: the screen is reset for the next game. A GAME_OVER that announces a next game
+ *       does not stop the controller; only the session's last GAME_OVER does.</li>
  * </ul>
  */
 public final class ClientController implements EventStreamListener.Callback {
@@ -109,7 +112,11 @@ public final class ClientController implements EventStreamListener.Callback {
         });
     }
 
-    /** Used by the headless client: waits until GAME_OVER has been handled. */
+    /**
+     * Used by the headless client: waits until the session is over, i.e. a GAME_OVER without a next
+     * game has been handled, or the event stream has closed for good. A GAME_OVER that announces a
+     * next game does not count: the player stays for the next game.
+     */
     public boolean awaitGameOver(long timeoutMs) throws InterruptedException {
         return gameOver.await(timeoutMs, TimeUnit.MILLISECONDS);
     }
@@ -124,6 +131,8 @@ public final class ClientController implements EventStreamListener.Callback {
     @Override
     public void onConnection(ConnectionState state) {
         view.showConnection(state);
+        if (state == ConnectionState.CLOSED)
+            gameOver.countDown(); // the listener has stopped for good: nothing more will come
     }
 
     @Override
@@ -138,8 +147,8 @@ public final class ClientController implements EventStreamListener.Callback {
             while (true) {
                 ServerEvent event = inbox.take();
                 handle(event);
-                if (event instanceof GameOverEvent)
-                    break;
+                if (event instanceof GameOverEvent over && !over.hasNextGame())
+                    break; // the session's last game is over
             }
         } catch (InterruptedException e) {
             // stop() was called: the window was closed
@@ -168,7 +177,10 @@ public final class ClientController implements EventStreamListener.Callback {
                         + " for the rest of the game. You can still watch.");
         } else if (event instanceof GameOverEvent over) {
             view.showGameOver(over);
-            gameOver.countDown();
+            if (!over.hasNextGame())
+                gameOver.countDown();
+        } else if (event instanceof NewGameEvent newGame) {
+            view.showNewGame(newGame);
         }
     }
 

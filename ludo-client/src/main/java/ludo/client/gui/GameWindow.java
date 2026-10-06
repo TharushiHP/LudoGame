@@ -4,6 +4,7 @@ import ludo.client.control.Identity;
 import ludo.client.net.ConnectionState;
 import ludo.shared.protocol.DecisionRequest;
 import ludo.shared.protocol.GameOverEvent;
+import ludo.shared.protocol.NewGameEvent;
 import ludo.shared.protocol.PausedEvent;
 import ludo.shared.protocol.ResumedEvent;
 import ludo.shared.protocol.RollRequest;
@@ -29,9 +30,9 @@ import java.awt.event.WindowEvent;
 
 /**
  * The one game window, like a real Ludo app: the Figure 1 board, a player box with a dice at
- * each corner, glossy animated tokens, banners, toasts and a winner screen ({@link TablePanel}),
+ * each corner, glossy animated tokens, banners, toasts and a closable winner box ({@link TablePanel}),
  * with a hidden developer overlay on F2 ({@link DevOverlay}). The round "i" button opens the
- * symbol legend ({@link LegendOverlay}); a click or Esc closes it.
+ * symbol legend ({@link LegendOverlay}); a click or Esc closes it. Esc also closes the winner box.
  * <p>
  * <b>Spectator or player.</b> The demo opens this window as a <b>spectator</b>: it never ACKs,
  * so it can animate (tokens walk, the dice tumbles) without slowing the game down. The four
@@ -82,11 +83,11 @@ public final class GameWindow extends JFrame {
                 dev.setVisible(!dev.isVisible());
             }
         });
-        layers.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ESCAPE"), "closeLegend");
-        layers.getActionMap().put("closeLegend", new AbstractAction() {
+        layers.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ESCAPE"), "escape");
+        layers.getActionMap().put("escape", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                table.closeLegend();
+                table.escape(); // the legend first, then the winner box
             }
         });
 
@@ -159,7 +160,17 @@ public final class GameWindow extends JFrame {
         table.gameOver(over);
         table.overlays().clear("pause");
         table.overlays().clear("connection");
-        dev.append("! GAME_OVER " + over.status() + " " + over.finishPositions());
+        dev.append("! GAME_OVER " + over.status() + " " + over.finishPositions()
+                + (over.hasNextGame() ? ", next game in " + over.nextGameInMs() + " ms" : ""));
+    }
+
+    /** The server starts the next game (same seats): reset the table and say so. */
+    void showNewGame(NewGameEvent newGame) {
+        table.newGame();
+        table.overlays().clear("pause");
+        table.overlays().clear("connection");
+        table.overlays().toast("Game " + newGame.gameNumber() + " starting", System.currentTimeMillis());
+        dev.append("! NEW_GAME " + newGame.gameNumber() + " (seed " + newGame.seed() + ")");
     }
 
     void showConnection(ConnectionState state) {

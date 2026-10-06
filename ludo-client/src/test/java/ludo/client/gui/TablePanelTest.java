@@ -2,6 +2,7 @@ package ludo.client.gui;
 
 import ludo.client.control.Identity;
 import ludo.client.gui.model.TableLayout;
+import ludo.client.gui.model.WinnerBox;
 import ludo.shared.Direction;
 import ludo.shared.EffectKind;
 import ludo.shared.PieceLocation;
@@ -129,6 +130,56 @@ class TablePanelTest {
         podium.gameOver(new GameOverEvent(GameStatus.FINISHED,
                 Map.of(PlayerColor.RED, 1, PlayerColor.GREEN, 2, PlayerColor.YELLOW, 3, PlayerColor.BLUE, 4)));
         painted(podium);
+        TablePanel countdown = new TablePanel(Identity.spectator(null), false);
+        countdown.gameOver(new GameOverEvent(GameStatus.FINISHED, Map.of(PlayerColor.RED, 1), 10_000));
+        painted(countdown);
+    }
+
+    private static TablePanel afterFirstWinner() {
+        TablePanel panel = new TablePanel(Identity.spectator(null), false);
+        panel.apply(state(1, 30));
+        panel.gameOver(new GameOverEvent(GameStatus.FINISHED, Map.of(PlayerColor.RED, 1), 10_000));
+        return painted(panel);
+    }
+
+    @Test
+    void theWinnerBoxClosesWithItsCloseButtonOnly() {
+        TablePanel panel = afterFirstWinner();
+        WinnerBox box = WinnerBox.of(TableLayout.of(W, H).board(), true);
+        assertTrue(panel.winnerBoxOpen());
+
+        click(panel, box.box().centreX(), box.box().centreY());
+        assertTrue(panel.winnerBoxOpen(), "a click inside the box but not on the × keeps it open");
+        assertEquals("Close (Esc)", hover(panel, box.close().centreX(), box.close().centreY()));
+        click(panel, box.close().centreX(), box.close().centreY());
+        assertFalse(panel.winnerBoxOpen());
+        assertNotNull(panel.gameOver(), "closing only hides the box; the game is still over");
+    }
+
+    @Test
+    void escClosesTheLegendFirstThenTheWinnerBox() {
+        TablePanel panel = afterFirstWinner();
+        TableLayout.Rect info = TableLayout.of(W, H).info();
+        click(panel, info.centreX(), info.centreY());
+        assertTrue(panel.legendOpen());
+
+        panel.escape();
+        assertFalse(panel.legendOpen());
+        assertTrue(panel.winnerBoxOpen(), "the first Esc closes only the legend");
+        panel.escape();
+        assertFalse(panel.winnerBoxOpen());
+    }
+
+    @Test
+    void newGameResetsTheTable() {
+        TablePanel panel = afterFirstWinner();
+        panel.newGame();
+        assertNull(panel.snapshot(), "every token is drawn in base until the new game's first STATE");
+        assertNull(panel.gameOver());
+        assertFalse(panel.winnerBoxOpen());
+        painted(panel);
+        panel.apply(state(2, 12));
+        assertEquals(12, panel.snapshot().pieces().get(8).position());
     }
 
     @Test

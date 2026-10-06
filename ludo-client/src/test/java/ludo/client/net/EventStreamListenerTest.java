@@ -53,6 +53,28 @@ class EventStreamListenerTest {
     }
 
     @Test
+    void keepsReadingAfterAGameOverThatAnnouncesANextGame() throws Exception {
+        AtomicInteger connections = new AtomicInteger();
+        try (StubServer server = new StubServer("/games/1/events", exchange -> {
+            connections.incrementAndGet();
+            exchange.sendResponseHeaders(200, 0);
+            write(exchange, "id: 1\nevent: GAME_OVER\ndata: {\"status\":\"FINISHED\",\"finishPositions\":{\"RED\":1},\"nextGameInMs\":100}\n\n"
+                    + "id: 2\nevent: NEW_GAME\ndata: {\"gameNumber\":2,\"seed\":42}\n\n"
+                    + "id: 3\nevent: GAME_OVER\ndata: {\"status\":\"FINISHED\",\"finishPositions\":{\"BLUE\":1},\"nextGameInMs\":0}\n\n");
+            exchange.close();
+        })) {
+            Recorder recorder = new Recorder();
+            EventStreamListener listener = new EventStreamListener(HttpClient.newHttpClient(),
+                    URI.create(server.url() + "/games/1/events"), recorder);
+            listener.start();
+            assertTrue(recorder.closed.await(10, TimeUnit.SECONDS), "stops after the last GAME_OVER");
+            assertEquals(List.of(EventType.GAME_OVER, EventType.NEW_GAME, EventType.GAME_OVER),
+                    recorder.events.stream().map(ServerEvent::type).toList());
+            assertEquals(1, connections.get(), "one stream for both games, and no reconnect at the end");
+        }
+    }
+
+    @Test
     void theListenerThreadIsADaemon() throws Exception {
         try (StubServer server = new StubServer("/games/1/events", exchange -> {
             exchange.sendResponseHeaders(200, 0);

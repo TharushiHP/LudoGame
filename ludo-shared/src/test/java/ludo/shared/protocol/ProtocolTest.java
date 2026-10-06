@@ -124,11 +124,22 @@ class ProtocolTest {
                 new DecisionRequest(PlayerColor.BLUE, 7, DecisionKind.CHOOSE_PIECE, 4, List.of(1, 3), 12, sample()),
                 new PausedEvent(PlayerColor.GREEN, "no ROLL within 10000 ms"),
                 new ResumedEvent(PlayerColor.GREEN, true),
-                new GameOverEvent(GameStatus.FINISHED, Map.of(PlayerColor.RED, 1, PlayerColor.BLUE, 2)));
+                new GameOverEvent(GameStatus.FINISHED, Map.of(PlayerColor.RED, 1, PlayerColor.BLUE, 2)),
+                new GameOverEvent(GameStatus.FINISHED, Map.of(PlayerColor.RED, 1), 10_000),
+                new NewGameEvent(2, -4_611_686_018_427_387_904L));
         for (ServerEvent event : events) {
             String text = JsonWriter.write(event.toJson());
             assertEquals(event, ServerEvent.fromJson(event.type(), JsonParser.parseObject(text)), text);
         }
+    }
+
+    @Test
+    void gameOverWithoutNextGameInMsMeansNoNextGame() {
+        GameOverEvent old = GameOverEvent.fromJson(JsonParser.parseObject(
+                "{\"status\":\"FINISHED\",\"finishPositions\":{\"RED\":1}}"));
+        assertEquals(0, old.nextGameInMs());
+        assertFalse(old.hasNextGame());
+        assertTrue(new GameOverEvent(GameStatus.FINISHED, Map.of(), 100).hasNextGame());
     }
 
     @Test
