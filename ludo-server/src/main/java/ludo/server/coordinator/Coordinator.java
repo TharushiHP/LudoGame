@@ -211,6 +211,7 @@ final class Coordinator implements CoordinatorContext {
     public int takeSeat(JoinRequest join) {
         int joined = seats.take(join);
         session.publishJoined(joined);
+        session.publishTaken(seats.taken());
         log.log(join.colour() + " joined as \"" + join.clientName() + "\" (triesOtherPiecesWhenBlocked="
                 + join.triesOtherPiecesWhenBlocked() + "), " + joined + "/4");
         return joined;

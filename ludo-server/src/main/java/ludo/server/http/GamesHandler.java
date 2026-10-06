@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <pre>
  * POST /games                    {seed?, turnDelayMs?}  -> 201 {gameId, seed, turnDelayMs}
  * GET  /games                                           -> {games: [...]}
- * GET  /games/{id}                                      -> one game's summary
+ * GET  /games/{id}                                      -> one game's summary (incl. taken colours)
  * POST /games/{id}/join          {colour, clientName, triesOtherPiecesWhenBlocked}
  * POST /games/{id}/roll          {colour, turnId, expectedVersion, requestId}
  * POST /games/{id}/decision      {colour, decisionId, expectedVersion, requestId, piece | fromBase, memo?}
@@ -179,6 +179,11 @@ final class GamesHandler implements HttpHandler {
         json.put("state", session.stateName());
         json.put("version", session.version());
         json.put("joined", session.joined());
+        List<Object> taken = new ArrayList<>();
+        for (PlayerColor colour : PlayerColor.values()) // always enum order, whatever the set's order
+            if (session.taken().contains(colour))
+                taken.add(colour.name());
+        json.put("taken", taken);
         json.put("seed", session.seed());
         json.put("turnDelayMs", session.turnDelayMs());
         return json;

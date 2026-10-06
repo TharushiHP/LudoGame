@@ -3,12 +3,14 @@ package ludo.server.coordinator;
 import ludo.server.config.ServerConfig;
 import ludo.server.config.ServerLog;
 import ludo.server.coordinator.state.Reply;
+import ludo.shared.PlayerColor;
 import ludo.shared.protocol.ClientRequest;
 import ludo.shared.protocol.GameOverEvent;
 import ludo.shared.protocol.StateEvent;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -45,6 +47,7 @@ public final class GameSession {
     private volatile StateView latest;
     private volatile String stateName = "Created";
     private volatile int joined;
+    private volatile Set<PlayerColor> taken = Set.of();
     private volatile boolean closed;
     private volatile GameOverEvent result;
 
@@ -165,6 +168,11 @@ public final class GameSession {
         return joined;
     }
 
+    /** Colours that have joined: an immutable set, replaced by the game thread on every JOIN. */
+    public Set<PlayerColor> taken() {
+        return taken;
+    }
+
     public Thread gameThread() {
         return gameThread;
     }
@@ -193,6 +201,10 @@ public final class GameSession {
 
     void publishJoined(int count) {
         joined = count;
+    }
+
+    void publishTaken(Set<PlayerColor> colours) {
+        taken = Set.copyOf(colours);
     }
 
     void markClosed(GameOverEvent gameOver) {

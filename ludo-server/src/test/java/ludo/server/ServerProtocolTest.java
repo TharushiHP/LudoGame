@@ -141,6 +141,7 @@ class ServerProtocolTest {
         HttpResponse<String> games = fixture.get("/games");
         assertEquals(200, games.statusCode());
         assertTrue(games.body().contains("AwaitingRoll"), games.body());
+        assertTrue(games.body().contains("\"taken\":[\"RED\",\"GREEN\",\"YELLOW\",\"BLUE\"]"), games.body());
     }
 
     // --- helpers ---

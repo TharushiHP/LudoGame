@@ -27,6 +27,11 @@ final class PlayerSeats {
         return joined.size();
     }
 
+    /** The colours that have joined (a live view: callers must copy it before publishing). */
+    Set<PlayerColor> taken() {
+        return joined.keySet();
+    }
+
     int count() {
         return joined.size();
     }

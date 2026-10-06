@@ -10,6 +10,45 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <!-- Thick client tier (Swing GUI + strategy). Placeholder until the client task. -->
+    <!-- Thick client tier: Swing GUI, event-stream listener and this player's strategy (runnable jar).
+         It never depends on ludo-core or ludo-server: it only renders snapshots the server sends. -->
     <artifactId>ludo-client</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.ludo</groupId>
+            <artifactId>ludo-shared</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.ludo</groupId>
+            <artifactId>ludo-players</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>ludo-client</finalName>
+        <plugins>
+            <!-- Packs the client, ludo-shared and ludo-players into one runnable jar (build plugin only). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>ludo.client.ClientMain</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>
