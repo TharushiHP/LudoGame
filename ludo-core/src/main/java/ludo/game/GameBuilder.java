@@ -18,7 +18,8 @@ import java.util.Random;
  * Injection / composition root for the game): random source, board, dice, coin, the four
  * players, the {@link MoveDecider}, the {@link TurnGate} and the event listeners.
  * A {@link MoveDecider} is required: the core module does not know any player behaviour, so the
- * caller (console simulation, server or test) supplies one. Defaults: {@link NoOpTurnGate}, no listeners.
+ * caller (console simulation, server or test) supplies one. Defaults: {@link NoOpTurnGate}, no listeners,
+ * {@link EndCondition#ALL_PLACES}.
  * A fixed seed makes a game replay exactly.
  */
 public class GameBuilder {
@@ -29,6 +30,7 @@ public class GameBuilder {
     private final List<GameEventListener> listeners = new ArrayList<>();
     private int maxRounds = Game.DEFAULT_MAX_ROUNDS;
     private int stalemateRounds = Game.DEFAULT_STALEMATE_ROUNDS;
+    private EndCondition endCondition = EndCondition.ALL_PLACES;
 
     public GameBuilder withRandomSource(RandomSource source) {
         this.randomSource = source;
@@ -66,6 +68,12 @@ public class GameBuilder {
         return this;
     }
 
+    /** When the game ends (Rule 11); default {@link EndCondition#ALL_PLACES}, the A1 behaviour. */
+    public GameBuilder withEndCondition(EndCondition condition) {
+        this.endCondition = Objects.requireNonNull(condition, "endCondition");
+        return this;
+    }
+
     public Game build() {
         RandomSource source = randomSource != null ? randomSource : new JavaRandom();
         Board board = new Board(source);
@@ -73,7 +81,7 @@ public class GameBuilder {
         Coin coin = new Coin(source);
         List<Player> players = createPlayers();
         MoveDecider decider = Objects.requireNonNull(moveDecider, "GameBuilder needs a MoveDecider: call withMoveDecider(...)");
-        return new Game(board, dice, coin, players, decider, turnGate, listeners, maxRounds, stalemateRounds);
+        return new Game(board, dice, coin, players, decider, turnGate, listeners, maxRounds, stalemateRounds, endCondition);
     }
 
     // The order Yellow, Blue, Red, Green is the A1 order used for the starting roll-off.

@@ -31,7 +31,7 @@ The script:
 1. builds the jars if they are missing (tests skipped),
 2. starts the server in its own window, "LUDO-T server" (`--turn-delay=500`), and also saves its output to `logs\server.log`,
 3. waits until `GET http://localhost:8080/health` answers,
-4. creates game 1 with seed 7 (`POST /games {"seed":7}`),
+4. creates game 1 with seed 7 (`POST /games {"seed":7}`); it uses the server's default end condition, so it stops when the first player wins,
 5. opens **the game window**, a maximised spectator view of game 1 (it opens first, so it shows the game from the first move),
 6. starts the four players, Red, Green, Yellow and Blue, as separate client applications **without a window** (`--headless`). Each runs in its own minimised console ("LUDO-T Red player" and so on), which prints that player's log.
 
@@ -58,7 +58,11 @@ Where to look:
    ```
    All options are optional (values in ms). The log shows every request, state change and ACK, with the name of the thread that handled it.
 
-You can create a game here with `curl.exe -X POST -H "Content-Type: application/json" -d "{\"seed\":7}" http://localhost:8080/games`, or from any client's connect window ("New game...").
+   `--end-condition=FIRST_WINNER|ALL_PLACES` (not case-sensitive) sets how games end by default:
+   - **FIRST_WINNER** (default): the game stops as soon as the first player has all four tokens Home. Only the winner is placed; the others are listed as "Not ranked".
+   - **ALL_PLACES**: the game plays on until every place is decided, like the console simulation (Rule 11 says the game *may* continue).
+
+You can create a game here with `curl.exe -X POST -H "Content-Type: application/json" -d "{\"seed\":7}" http://localhost:8080/games`, or from any client's connect window ("New game..."). Add `"endCondition":"ALL_PLACES"` (or `"FIRST_WINNER"`) to the body to override the server's default for that game; an unknown value gets HTTP 400. The reply, `GET /games` and `GET /games/{id}` all include the game's `endCondition`, and the connect window shows it in the **Ends at** column.
 
 ### PCs 2 to 5: the clients
 
@@ -123,8 +127,9 @@ One window, like a real Ludo app. It fits the screen (Windows display scaling in
   | stack with "×N" | a block of N tokens |
 
   **Hover** over a token for its name, location, direction, captures and effect with rounds left. Hover over a cell for its number and meaning (X, approach, Alpha/Beta/Gamma, mystery).
+- **Symbol legend:** click the round **i** button (top-right of the window, or the nearest free corner) to open a card that explains every symbol: the badges above, blocks, the mystery cell, α β γ, the X start cells and the approach circles. The symbols are drawn by the same code as the board. Click anywhere or press **Esc** to close it.
 - **Player boxes** sit outside each corner, next to that player's base:
-  - "Red · Aggressive", a dice and the player's Home progress.
+  - the colour name only ("Red"), a dice and the player's Home progress.
   - The player whose turn it is **glows** and its dice shows the roll; the others are dimmed.
   - Tags: **YOU** (your colour, in a player window), **computer** (the server took over that colour), **1st place** and so on.
 - **Animations** (game window as spectator only):
@@ -134,7 +139,11 @@ One window, like a real Ludo app. It fits the screen (Windows display scaling in
   - a new state arriving mid-move snaps to it at once
 - **Banners** pop up over the board for about 1.5 s on a capture, a mystery teleport, an Alpha/Beta/Gamma effect, a block, a token reaching Home, and a player finishing.
 - **Toasts** appear only for problems: "Reconnecting...", "Waiting for Blue..." (the server paused for that player), "Blue is now played by the computer".
-- **Winner screen:** at the end of the game, a podium shows places 1-3, with 4th beneath, and how the game ended.
+- **Winner screen:**
+  - a game that ends at the first winner (the default) shows a large **"RED WINS!"** in the winner's colour with the winner's token, and nothing about the other players;
+  - any other ending (ALL_PLACES, stalemate, round limit, server stopped) shows a podium with places 1-3, 4th beneath, and how the game ended.
+
+  The window stays open on this screen until you close it; the headless players exit by themselves.
 
 ### Developer view: F2
 

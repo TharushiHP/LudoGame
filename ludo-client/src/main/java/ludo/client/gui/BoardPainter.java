@@ -126,32 +126,51 @@ final class BoardPainter {
         GridPos pos = layout.cell(c);
         Rectangle2D r = new Rectangle2D.Double(x0 + pos.col() * cell, y0 + pos.row() * cell, cell, cell);
         PlayerColor startOf = colourWithStart(c);
-        g.setColor(startOf != null ? Palette.board(startOf) : Color.WHITE);
+        if (startOf != null)
+            paintStartCell(g, r, cell, startOf);
+        else
+            paintCell(g, r, cell, Color.WHITE);
+        PlayerColor approachOf = colourWithApproach(c);
+        if (approachOf != null)
+            paintApproachCircle(g, r, cell, approachOf);
+        String greek = TokenText.greek(c);
+        if (!greek.isEmpty())
+            paintGreek(g, r, cell, greek);
+    }
+
+    /** One plain square of the path: the fill and the thin grid line round it. */
+    static void paintCell(Graphics2D g, Rectangle2D r, double cell, Color fill) {
+        g.setColor(fill);
         g.fill(r);
         line(g, cell);
         g.setColor(Palette.GRID_LINE);
         g.draw(r);
-        if (startOf != null) {
-            g.setColor(Color.BLACK);
-            g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, (int) Math.round(cell * 0.7)));
-            centred(g, "X", r.getCenterX(), r.getCenterY());
-        }
-        PlayerColor approachOf = colourWithApproach(c);
-        if (approachOf != null) {
-            double d = cell * 0.52;
-            Ellipse2D circle = new Ellipse2D.Double(r.getCenterX() - d / 2, r.getCenterY() - d / 2, d, d);
-            g.setColor(Palette.light(approachOf));
-            g.fill(circle);
-            g.setColor(Palette.token(approachOf).darker().darker());
-            g.setStroke(new BasicStroke((float) Math.max(1, cell * 0.04)));
-            g.draw(circle);
-        }
-        String greek = TokenText.greek(c);
-        if (!greek.isEmpty()) {
-            g.setColor(new Color(90, 90, 90));
-            g.setFont(new Font(Font.SERIF, Font.BOLD, (int) Math.round(cell * 0.34)));
-            g.drawString(greek, (float) (r.getX() + cell * 0.08), (float) (r.getY() + cell * 0.33));
-        }
+    }
+
+    /** A colour's start cell: its board colour with a black "X" (Figure 1). */
+    static void paintStartCell(Graphics2D g, Rectangle2D r, double cell, PlayerColor colour) {
+        paintCell(g, r, cell, Palette.board(colour));
+        g.setColor(Color.BLACK);
+        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, (int) Math.round(cell * 0.7)));
+        centred(g, "X", r.getCenterX(), r.getCenterY());
+    }
+
+    /** The light circle on a colour's approach cell, where its tokens turn into the home straight. */
+    static void paintApproachCircle(Graphics2D g, Rectangle2D r, double cell, PlayerColor colour) {
+        double d = cell * 0.52;
+        Ellipse2D circle = new Ellipse2D.Double(r.getCenterX() - d / 2, r.getCenterY() - d / 2, d, d);
+        g.setColor(Palette.light(colour));
+        g.fill(circle);
+        g.setColor(Palette.token(colour).darker().darker());
+        g.setStroke(new BasicStroke((float) Math.max(1, cell * 0.04)));
+        g.draw(circle);
+    }
+
+    /** The small α, β or γ in the top-left corner of the Alpha, Beta and Gamma cells. */
+    static void paintGreek(Graphics2D g, Rectangle2D r, double cell, String greek) {
+        g.setColor(new Color(90, 90, 90));
+        g.setFont(new Font(Font.SERIF, Font.BOLD, (int) Math.round(cell * 0.34)));
+        g.drawString(greek, (float) (r.getX() + cell * 0.08), (float) (r.getY() + cell * 0.33));
     }
 
     private void paintHomeStraight(Graphics2D g, double x0, double y0, double cell, PlayerColor colour) {
@@ -205,7 +224,11 @@ final class BoardPainter {
         if (mystery == null || !mystery.isActive())
             return;
         GridPos pos = layout.cell(mystery.cell());
-        double cx = x0 + (pos.col() + 0.5) * cell, cy = y0 + (pos.row() + 0.5) * cell;
+        paintMysteryAt(g, x0 + (pos.col() + 0.5) * cell, y0 + (pos.row() + 0.5) * cell, cell, mystery.roundsRemaining(), now);
+    }
+
+    /** The mystery cell's glow, "?" and {@code rounds} left, centred on (cx, cy). */
+    static void paintMysteryAt(Graphics2D g, double cx, double cy, double cell, int rounds, long now) {
         double pulse = 0.5 + 0.5 * Math.sin(now / 300.0);
         double radius = cell * (0.85 + 0.12 * pulse);
         g.setPaint(new RadialGradientPaint(new java.awt.geom.Point2D.Double(cx, cy), (float) radius,
@@ -221,7 +244,7 @@ final class BoardPainter {
         g.setColor(Palette.MYSTERY.darker());
         centred(g, "?", cx, cy - cell * 0.04);
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, (int) Math.round(cell * 0.24)));
-        g.drawString(String.valueOf(mystery.roundsRemaining()), (float) (cx + cell * 0.2), (float) (cy + cell * 0.4));
+        g.drawString(String.valueOf(rounds),(float) (cx + cell * 0.2), (float) (cy + cell * 0.4));
     }
 
     // --- helpers ---

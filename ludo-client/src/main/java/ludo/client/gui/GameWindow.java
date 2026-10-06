@@ -30,7 +30,8 @@ import java.awt.event.WindowEvent;
 /**
  * The one game window, like a real Ludo app: the Figure 1 board, a player box with a dice at
  * each corner, glossy animated tokens, banners, toasts and a winner screen ({@link TablePanel}),
- * with a hidden developer overlay on F2 ({@link DevOverlay}).
+ * with a hidden developer overlay on F2 ({@link DevOverlay}). The round "i" button opens the
+ * symbol legend ({@link LegendOverlay}); a click or Esc closes it.
  * <p>
  * <b>Spectator or player.</b> The demo opens this window as a <b>spectator</b>: it never ACKs,
  * so it can animate (tokens walk, the dice tumbles) without slowing the game down. The four
@@ -79,6 +80,13 @@ public final class GameWindow extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 dev.setVisible(!dev.isVisible());
+            }
+        });
+        layers.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ESCAPE"), "closeLegend");
+        layers.getActionMap().put("closeLegend", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                table.closeLegend();
             }
         });
 

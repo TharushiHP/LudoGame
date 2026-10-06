@@ -6,6 +6,7 @@ import ludo.shared.Direction;
 import ludo.shared.EffectKind;
 import ludo.shared.PieceLocation;
 import ludo.shared.PlayerColor;
+import ludo.shared.protocol.GameOverEvent;
 import ludo.shared.protocol.StateEvent;
 import ludo.shared.snapshot.GameSnapshot;
 import ludo.shared.snapshot.GameStatus;
@@ -22,7 +23,10 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** The game table, drawn off-screen: hover texts, and animation only in the spectator window. */
+/**
+ * The game table, drawn off-screen: hover texts, animation only in the spectator window, the
+ * legend button, and the winner screens.
+ */
 class TablePanelTest {
 
     private static final int W = 1200, H = 700;
@@ -74,6 +78,57 @@ class TablePanelTest {
         double[] straight = centreOf(layout.homeStraight(PlayerColor.GREEN, 0));
         assertEquals("Green home straight, square 1 of 5", hover(panel, straight[0], straight[1]));
         assertNull(hover(panel, 2, 2), "the table round the board has no hover text");
+    }
+
+    private static void click(TablePanel panel, double x, double y) {
+        panel.dispatchEvent(new MouseEvent(panel, MouseEvent.MOUSE_CLICKED, 0, 0,
+                (int) Math.round(x), (int) Math.round(y), 1, false, MouseEvent.BUTTON1));
+    }
+
+    @Test
+    void theInfoButtonOpensTheLegendAndAnyClickClosesIt() {
+        TablePanel panel = painted(new TablePanel(Identity.spectator(null), true));
+        TableLayout.Rect info = TableLayout.of(W, H).info();
+        assertFalse(panel.legendOpen());
+
+        click(panel, 5, H - 5);
+        assertFalse(panel.legendOpen(), "a click elsewhere does not open it");
+        click(panel, info.centreX(), info.centreY());
+        assertTrue(panel.legendOpen());
+        painted(panel); // the legend draws without errors
+        click(panel, info.centreX(), info.centreY());
+        assertFalse(panel.legendOpen(), "clicking the button again closes it");
+
+        click(panel, info.centreX(), info.centreY());
+        click(panel, W / 2.0, H / 2.0);
+        assertFalse(panel.legendOpen(), "a click anywhere closes it");
+        click(panel, info.centreX(), info.centreY());
+        panel.closeLegend(); // what Esc does
+        assertFalse(panel.legendOpen());
+    }
+
+    @Test
+    void aPlayerBoxShowsOnlyTheColourName() {
+        TablePanel panel = painted(new TablePanel(Identity.player(PlayerColor.RED, null), false));
+        TableLayout t = TableLayout.of(W, H);
+        TableLayout.Rect red = t.box(PlayerColor.RED), green = t.box(PlayerColor.GREEN);
+        assertEquals("Red (you)", hover(panel, red.centreX(), red.centreY()));
+        assertEquals("Green", hover(panel, green.centreX(), green.centreY()));
+        panel.substituted(PlayerColor.GREEN);
+        assertEquals("Green · played by the computer", hover(panel, green.centreX(), green.centreY()));
+    }
+
+    @Test
+    void theWinnerScreenDrawsForBothEndings() {
+        TablePanel first = new TablePanel(Identity.spectator(null), false);
+        first.apply(state(1, 30));
+        first.gameOver(new GameOverEvent(GameStatus.FINISHED, Map.of(PlayerColor.RED, 1)));
+        painted(first);
+        TablePanel podium = new TablePanel(Identity.spectator(null), false);
+        podium.apply(state(1, 30));
+        podium.gameOver(new GameOverEvent(GameStatus.FINISHED,
+                Map.of(PlayerColor.RED, 1, PlayerColor.GREEN, 2, PlayerColor.YELLOW, 3, PlayerColor.BLUE, 4)));
+        painted(podium);
     }
 
     @Test

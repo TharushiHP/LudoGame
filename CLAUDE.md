@@ -23,17 +23,18 @@ University assignment (COMP63038 Clean Coding & Concurrent Programming, Assignme
 | ludo-players | ludo.players: the four MoveStrategy behaviours, StrategyFactory, SnapshotStrategyDecider. Decide from snapshots only | ludo-shared |
 | ludo-core | ludo.board, dice, effect, game, piece, player: the rules and the one authoritative board | ludo-shared (ludo-players at test scope only) |
 | ludo-server | ludo.server: ServerMain (runnable jar), LudoServer, ConsoleSimulation; ludo.server.config (ServerConfig, ServerLog, NamedThreadFactory); ludo.server.coordinator (GameSession, Coordinator, CommandLoop, Broadcaster, RemoteTurnGate, RemoteMoveDecider, ...); ludo.server.coordinator.state (the 7 coordinator states, AckBarrier, Reply); ludo.server.http (LudoHttpServer, GamesHandler, SseSink); ludo.output.GameLogger; GoldenMasterTest + golden files | ludo-core, ludo-players |
-| ludo-client | ludo.client: ClientMain (runnable jar), ClientOptions, ClientSession; ludo.client.net (ServerGateway, HttpServerGateway Remote Proxy, RetryPolicy, SseFrameParser, EventStreamListener); ludo.client.control (ClientController, GameView port, Identity); ludo.client.gui (Swing: ConnectWindow, GameWindow, TablePanel, BoardPainter (Figure 1), TokenPainter, Animator, ...); ludo.client.gui.model (pure, tested: TableLayout, Route, PieceChange, Banner, DiceFaces, TokenText); ludo.client.console (ConsoleGameView, headless) | ludo-shared, ludo-players |
+| ludo-client | ludo.client: ClientMain (runnable jar), ClientOptions, ClientSession; ludo.client.net (ServerGateway, HttpServerGateway Remote Proxy, RetryPolicy, SseFrameParser, EventStreamListener); ludo.client.control (ClientController, GameView port, Identity); ludo.client.gui (Swing: ConnectWindow, GameWindow, TablePanel, BoardPainter (Figure 1), TokenPainter, Animator, LegendOverlay, WinnerOverlay, ...); ludo.client.gui.model (pure, tested: TableLayout, Route, PieceChange, Banner, DiceFaces, TokenText, Ending); ludo.client.console (ConsoleGameView, headless) | ludo-shared, ludo-players |
 | ludo-testclients | placeholder (ludo.testclients.TestClientsApp) | nothing yet |
 | database/ | SQL scripts (not created yet) | |
 
 GameBuilder (core) has no default MoveDecider; the caller must pass one (ConsoleSimulation and core tests pass SnapshotStrategyDecider).
+End condition (Rule 11 "may continue"): ludo.game.EndCondition ALL_PLACES (GameBuilder default; ConsoleSimulation keeps it, so the golden master is unchanged) or FIRST_WINNER (the game stops when the first player has all four tokens Home; only the winner is placed). The server defaults to FIRST_WINNER (--end-condition, or "endCondition" in POST /games). ServerGameTest's golden-master comparison game uses ALL_PLACES.
 
 ## Commands (Windows: use mvnw.cmd)
 - Build and test everything: `./mvnw clean package` (or `./mvnw test`)
 - Test one module: `./mvnw test -pl ludo-core -am`
 - Golden master only: `./mvnw test -pl ludo-server -am -Dtest=GoldenMasterTest -Dsurefire.failIfNoSpecifiedTests=false`
-- Run the coordinator server: `java -jar ludo-server/target/ludo-server.jar --port=8080 --turn-delay=500 --move-timeout=10000` (after `package`; all options optional, values in ms)
+- Run the coordinator server: `java -jar ludo-server/target/ludo-server.jar --port=8080 --turn-delay=500 --move-timeout=10000 --end-condition=FIRST_WINNER` (after `package`; all options optional, values in ms; --end-condition is FIRST_WINNER or ALL_PLACES, default FIRST_WINNER)
 - Run the console simulation: `java -cp ludo-server/target/ludo-server.jar ludo.server.ConsoleSimulation --seed=7`
 - Server tests only: `./mvnw test -pl ludo-server -am`
 - Client tests only: `./mvnw test -pl ludo-client -am`
@@ -56,7 +57,7 @@ All four players must see the same game at the same time. Mechanisms:
 ## Threads
 Be explicit about daemon vs non-daemon threads and justify each: see docs/THREADS.md (keep it up to date). Shutdown hook (`shutdown-hook`) refuses new requests, interrupts game threads (games end ABORTED, GAME_OVER is sent, queues are drained with 409), closes event streams, then stops the HTTP server. Saving state is added with the database task.
 Client: every thread the client starts (`event-stream`, `client-controller`, `decision-worker`, `client-start`) is a daemon; only the EDT (GUI) or the headless `main` waiting for GAME_OVER keeps the JVM alive. The window uses DISPOSE_ON_CLOSE, not System.exit. A client ACKs a STATE only after the view has applied it, always with its own hash.
-GUI: one game window drawn like Figure 1 of the brief (docs/figure1.png). Animations only in the spectator window (it never ACKs); a player window draws every state at once. Technical info lives in the server console and the F2 developer view.
+GUI: one game window drawn like Figure 1 of the brief (docs/figure1.png). Animations only in the spectator window (it never ACKs); a player window draws every state at once. Technical info lives in the server console and the F2 developer view. Player boxes show the colour name only (no strategy words). A round "i" button opens a symbol legend drawn with the board's own painters (click or Esc closes it). A FIRST_WINNER ending shows "RED WINS!" in the winner's colour; other endings show the podium.
 
 ## Working rules
 - Design patterns and SOLID principles from Assignment 1 must be preserved. Any change, removal or corrected label must be recorded in docs/CHANGES_FROM_A1.md with a reason.

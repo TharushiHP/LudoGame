@@ -45,11 +45,15 @@ class ServerGameTest {
         }
     }
 
-    /** The remote game is the same game as the console one: same seed, same strategies, same log. */
+    /**
+     * The remote game is the same game as the console one: same seed, same strategies, same log.
+     * The console plays every place (ALL_PLACES), so this game asks for that too; the server's
+     * default would stop at the first winner.
+     */
     @Test
     void remoteGameLogMatchesTheConsoleGoldenMaster() throws Exception {
         try (ServerFixture fixture = new ServerFixture(ServerFixture.fastConfig())) {
-            String gameId = fixture.createGame(SEED);
+            String gameId = fixture.createGame(SEED, "ALL_PLACES");
             List<FakePlayer> players = fixture.joinFour(gameId, FakePlayer.Mode.AUTO);
             for (FakePlayer player : players)
                 assertTrue(player.gameOver.await(120, TimeUnit.SECONDS));

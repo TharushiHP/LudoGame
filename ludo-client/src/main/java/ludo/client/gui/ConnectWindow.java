@@ -215,7 +215,7 @@ public final class ConnectWindow extends JFrame {
             boolean free = game.isPresent() && !game.get().isTaken(colour) && waiting;
             button.setEnabled(free);
             button.setBackground(free ? Palette.token(colour) : Palette.mix(Palette.token(colour), Color.WHITE, 0.65));
-            button.setToolTipText(free ? "Play " + colour.display() + " (" + Palette.strategy(colour) + ")"
+            button.setToolTipText(free ? "Play " + colour.display()
                     : game.isEmpty() ? "Pick a game first"
                     : !waiting ? "This game has started; you can only watch" : colour.display() + " is already taken");
         });
@@ -337,7 +337,7 @@ public final class ConnectWindow extends JFrame {
     /** The table of games (EDT only). */
     private static final class GamesModel extends AbstractTableModel {
 
-        private static final String[] COLUMNS = {"Game", "State", "Joined", "Taken", "Seed", "Turn delay"};
+        private static final String[] COLUMNS = {"Game", "State", "Joined", "Taken", "Seed", "Turn delay", "Ends at"};
         private List<GameSummary> rows = new ArrayList<>();
 
         void set(List<GameSummary> games) {
@@ -369,7 +369,8 @@ public final class ConnectWindow extends JFrame {
                 case 2 -> g.joined() + "/4";
                 case 3 -> g.taken().stream().map(PlayerColor::display).collect(Collectors.joining(", "));
                 case 4 -> g.seed();
-                default -> g.turnDelayMs() + " ms";
+                case 5 -> g.turnDelayMs() + " ms";
+                default -> g.endsAtFirstWinner() ? "First winner" : "All places";
             };
         }
     }

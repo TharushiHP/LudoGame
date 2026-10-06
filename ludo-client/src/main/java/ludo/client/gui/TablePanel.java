@@ -26,12 +26,14 @@ import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Composite;
+import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
@@ -50,8 +52,9 @@ import java.util.stream.Collectors;
 
 /**
  * The game table: the Figure 1 board as large as the window allows, a player box with a dice
- * outside each corner, the tokens, and the banners, toasts and winner screen on top. Everything
- * is drawn with Java2D and scales with the window ({@link TableLayout}).
+ * outside each corner, the tokens, and the banners, toasts and winner screen on top, plus a round
+ * "i" button that opens the symbol legend ({@link LegendOverlay}). Everything is drawn with Java2D
+ * and scales with the window ({@link TableLayout}).
  * <p>
  * {@link #apply} sets the new snapshot at once (that is what the controller waits for before it
  * ACKs); in the spectator window the {@link Animator} then shows how the tokens got there.
@@ -83,6 +86,8 @@ final class TablePanel extends JComponent {
     private double boardImageKey;
     private TableLayout table;
     private final List<Hit> hits = new ArrayList<>();
+    private boolean legendOpen;
+    private boolean infoHover;
 
     /** A token on screen and its hover text. */
     private record Hit(Ellipse2D area, String text) {
@@ -95,6 +100,56 @@ final class TablePanel extends JComponent {
         ToolTipManager.sharedInstance().registerComponent(this);
         ToolTipManager.sharedInstance().setInitialDelay(250);
         overlays.sticky("players", "Waiting for players...");
+        MouseAdapter mouse = new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                clicked(e.getX(), e.getY());
+            }
+
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                boolean over = onInfo(e.getX(), e.getY());
+                if (over != infoHover) {
+                    infoHover = over;
+                    setCursor(Cursor.getPredefinedCursor(over ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
+                    repaint();
+                }
+            }
+        };
+        addMouseListener(mouse);
+        addMouseMotionListener(mouse);
+    }
+
+    // --- the "i" button and the symbol legend (EDT) ---
+
+    /** A click on the "i" button opens the legend; any click while it is open closes it. */
+    private void clicked(double x, double y) {
+        if (legendOpen)
+            closeLegend();
+        else if (onInfo(x, y)) {
+            legendOpen = true;
+            repaint();
+        }
+    }
+
+    private boolean onInfo(double x, double y) {
+        if (table == null)
+            return false;
+        Rect info = table.info();
+        double r = info.width() / 2;
+        return Math.hypot(x - info.centreX(), y - info.centreY()) <= r;
+    }
+
+    /** Closes the legend (a click anywhere, or Esc through the window's key binding). */
+    void closeLegend() {
+        if (legendOpen) {
+            legendOpen = false;
+            repaint();
+        }
+    }
+
+    boolean legendOpen() {
+        return legendOpen;
     }
 
     Overlays overlays() {
@@ -186,7 +241,24 @@ final class TablePanel extends JComponent {
         overlays.paint(g, board, now);
         if (gameOver != null && !animator.busy(now))
             WinnerOverlay.paint(g, w, h, board, gameOver, now - gameOverAt);
+        if (legendOpen)
+            LegendOverlay.paint(g, w, h, board, now);
+        paintInfoButton(g, table.info());
         g.dispose();
+    }
+
+    /** The round "i" button: a white disc with a dark rim and a bold "i", lighter under the mouse. */
+    private void paintInfoButton(Graphics2D g, Rect info) {
+        double r = info.width() / 2, cx = info.centreX(), cy = info.centreY();
+        g.setColor(Palette.SHADOW);
+        g.fill(TokenPainter.circle(cx + r * 0.06, cy + r * 0.12, r));
+        g.setColor(infoHover || legendOpen ? new Color(225, 235, 255) : Color.WHITE);
+        g.fill(TokenPainter.circle(cx, cy, r));
+        g.setColor(new Color(40, 46, 60));
+        g.setStroke(new BasicStroke((float) Math.max(1.5, r * 0.12)));
+        g.draw(TokenPainter.circle(cx, cy, r * 0.94));
+        g.setFont(new Font(Font.SERIF, Font.BOLD, (int) Math.max(10, r * 1.3)));
+        BoardPainter.centred(g, "i", cx, cy);
     }
 
     /** The static board, drawn once per size at the screen's real resolution (Windows scaling). */
@@ -319,8 +391,8 @@ final class TablePanel extends JComponent {
         g.draw(shape);
 
         double pad = h * 0.12;
-        // Title "Red · Aggressive", shrunk until it fits the box.
-        String title = colour.display() + " · " + Palette.strategy(colour);
+        // Title: the colour name only ("Red"), shrunk until it fits the box.
+        String title = colour.display();
         Font font = fit(g, title, new Font(Font.SANS_SERIF, Font.BOLD, (int) Math.max(10, h * 0.19)), w - 2 * pad);
         g.setFont(font);
         FontMetrics fm = g.getFontMetrics();
@@ -391,6 +463,10 @@ final class TablePanel extends JComponent {
 
     @Override
     public String getToolTipText(MouseEvent e) {
+        if (legendOpen)
+            return null;
+        if (onInfo(e.getX(), e.getY()))
+            return "What the symbols mean";
         for (int i = hits.size() - 1; i >= 0; i--)
             if (hits.get(i).area().contains(e.getX(), e.getY()))
                 return hits.get(i).text();
@@ -398,7 +474,7 @@ final class TablePanel extends JComponent {
             return null;
         for (PlayerColor colour : PlayerColor.values())
             if (table.box(colour).contains(e.getX(), e.getY()))
-                return colour.display() + " · " + Palette.strategy(colour) + (me.plays(colour) ? " (you)" : "")
+                return colour.display() + (me.plays(colour) ? " (you)" : "")
                         + (substituted.contains(colour) ? " · played by the computer" : "");
         Rect board = table.board();
         if (!board.contains(e.getX(), e.getY()))

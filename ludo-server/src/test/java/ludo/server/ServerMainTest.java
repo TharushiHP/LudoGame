@@ -1,5 +1,6 @@
 package ludo.server;
 
+import ludo.game.EndCondition;
 import ludo.server.config.ServerConfig;
 import org.junit.jupiter.api.Test;
 
@@ -14,6 +15,14 @@ class ServerMainTest {
         assertEquals(8080, config.port());
         assertEquals(500, config.turnDelayMs());
         assertEquals(10_000, config.moveTimeoutMs());
+        assertEquals(EndCondition.FIRST_WINNER, config.endCondition());
+    }
+
+    @Test
+    void parsesTheEndCondition() {
+        assertEquals(EndCondition.ALL_PLACES, ServerMain.parse(new String[] {"--end-condition=ALL_PLACES"}).endCondition());
+        assertEquals(EndCondition.FIRST_WINNER, ServerMain.parse(new String[] {"--end-condition=first_winner"}).endCondition());
+        assertThrows(IllegalArgumentException.class, () -> ServerMain.parse(new String[] {"--end-condition=NEVER"}));
     }
 
     @Test

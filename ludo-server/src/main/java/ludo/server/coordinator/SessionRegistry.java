@@ -1,5 +1,6 @@
 package ludo.server.coordinator;
 
+import ludo.game.EndCondition;
 import ludo.server.config.ServerConfig;
 import ludo.server.config.ServerLog;
 
@@ -28,15 +29,25 @@ public final class SessionRegistry {
         this.log = log;
     }
 
-    /** Creates and starts a game; null arguments take a random seed / the server's turn delay. */
+    /** Creates and starts a game with the server's default end condition. */
     public GameSession create(Long seed, Long turnDelayMs) {
+        return create(seed, turnDelayMs, null);
+    }
+
+    /**
+     * Creates and starts a game; null arguments take a random seed / the server's turn delay /
+     * the server's end condition.
+     */
+    public GameSession create(Long seed, Long turnDelayMs, EndCondition endCondition) {
         String id = String.valueOf(nextId.incrementAndGet());
         long actualSeed = seed != null ? seed : new Random().nextLong();
         long delay = turnDelayMs != null ? turnDelayMs : config.turnDelayMs();
-        GameSession session = new GameSession(id, actualSeed, delay, config, log);
+        EndCondition ending = endCondition != null ? endCondition : config.endCondition();
+        GameSession session = new GameSession(id, actualSeed, delay, ending, config, log);
         sessions.put(id, session);
         session.start();
-        log.log("game " + id + " created (seed " + actualSeed + ", turn delay " + delay + " ms)");
+        log.log("game " + id + " created (seed " + actualSeed + ", turn delay " + delay + " ms, ends at "
+                + ending + ")");
         return session;
     }
 

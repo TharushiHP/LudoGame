@@ -58,6 +58,7 @@ public class Game {
     private final TurnGate turnGate;
     private final int maxRounds;
     private final int stalemateRounds;
+    private final EndCondition endCondition;
     private int roundNumber;
     private int turnCount;
     private int lastProgressRound;
@@ -69,7 +70,8 @@ public class Game {
 
     // Package-private: build games through GameBuilder, which wires every collaborator.
     Game(Board board, Dice dice, Coin coin, List<Player> players, MoveDecider moveDecider,
-            TurnGate turnGate, List<GameEventListener> listeners, int maxRounds, int stalemateRounds) {
+            TurnGate turnGate, List<GameEventListener> listeners, int maxRounds, int stalemateRounds,
+            EndCondition endCondition) {
         this.board = board;
         this.dice = dice;
         this.coin = coin;
@@ -79,6 +81,7 @@ public class Game {
         this.observers = new java.util.ArrayList<>(listeners);
         this.maxRounds = maxRounds;
         this.stalemateRounds = stalemateRounds;
+        this.endCondition = endCondition;
         this.roundNumber = 0;
         this.turnCount = 0;
         this.lastProgressRound = 0;
@@ -101,7 +104,12 @@ public class Game {
     }
 
     public boolean isRoundCapReached() {
-        return roundNumber >= maxRounds && activePlayers() > 1 && !isStalemate();
+        return roundNumber >= maxRounds && !isOver() && !isStalemate();
+    }
+
+    /** ALL_PLACES: one player (or none) still playing, exactly the A1 test. FIRST_WINNER: someone has won. */
+    private boolean isOver() {
+        return endCondition == EndCondition.FIRST_WINNER ? rankedPlayers() >= 1 : activePlayers() <= 1;
     }
 
     private boolean isStalemate() {
@@ -224,14 +232,15 @@ public class Game {
         publish(GameEvent.FIRST_PLAYER_CHOSEN, "The order of a single round is " + joined + ".");
     }
 
-    // Rule 11: the game ends as soon as only one player still has pieces to bring home.
+    // Rule 11: the game ends as soon as only one player still has pieces to bring home (ALL_PLACES),
+    // or as soon as the first player has (FIRST_WINNER).
     // Stalemate rule (fills a spec gap): it also ends after stalemateRounds rounds without progress.
     private void mainLoop(List<Player> order) throws InterruptedException {
-        while (activePlayers() > 1 && roundNumber < maxRounds && !isStalemate()) {
+        while (!isOver() && roundNumber < maxRounds && !isStalemate()) {
             roundNumber++;
             publish(GameEvent.ROUND_START, "\n=== Round " + roundNumber + " ===");
             for (Player player : order) {
-                if (activePlayers() <= 1) {
+                if (isOver()) {
                     break;
                 }
                 if (!player.hasAllPiecesHome()) {
@@ -241,13 +250,17 @@ public class Game {
                 }
             }
             printRoundStatus(order);
-            if (activePlayers() > 1) {
+            if (!isOver()) {
                 board.onRoundComplete(allPieces(order));
                 printMysteryStatus();
             }
         }
-        if (activePlayers() <= 1) {
-            rankLastPlayer();
+        if (isOver()) {
+            if (endCondition == EndCondition.FIRST_WINNER) {
+                publish(GameEvent.GAME_OVER, "\nThe game ends with the first winner (Rule 11): the other players are not ranked.");
+            } else {
+                rankLastPlayer();
+            }
             status = GameStatus.FINISHED;
         } else if (isStalemate()) {
             declareStalemate();

@@ -3,6 +3,7 @@ package ludo.client.gui.model;
 import ludo.shared.PlayerColor;
 
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -10,7 +11,8 @@ import java.util.Map;
  * Swing, unit-tested). The board is the largest square that fits once the player boxes have room
  * outside its corners: beside the board when the window is wide, above and below it when the
  * window is tall. Whichever gives the larger board wins. Each box sits next to its own base:
- * Green top-left, Yellow top-right, Red bottom-left, Blue bottom-right (Figure 1).
+ * Green top-left, Yellow top-right, Red bottom-left, Blue bottom-right (Figure 1). A small round
+ * "i" button for the symbol legend goes in a free spot round them ({@link #info()}).
  */
 public final class TableLayout {
 
@@ -19,6 +21,8 @@ public final class TableLayout {
     static final double BOX_HEIGHT = 0.17;
     /** Space between board and boxes, and round the edge, as a fraction of the board side. */
     static final double GAP = 0.02;
+    /** Diameter of the round "i" (legend) button, as a fraction of the board side. */
+    static final double INFO = 0.05;
 
     /** An axis-aligned rectangle in pixels (Value Object). */
     public record Rect(double x, double y, double width, double height) {
@@ -46,10 +50,39 @@ public final class TableLayout {
 
     private final Rect board;
     private final Map<PlayerColor, Rect> boxes;
+    private final Rect info;
 
-    private TableLayout(Rect board, Map<PlayerColor, Rect> boxes) {
+    private TableLayout(Rect board, Map<PlayerColor, Rect> boxes, double width, double height) {
         this.board = board;
         this.boxes = boxes;
+        this.info = placeInfo(width, height);
+    }
+
+    /**
+     * The info button goes in the first free spot of: the panel's top-right corner, just below the
+     * Yellow box, the bottom-right corner, the top-left corner. Free = inside the panel and over
+     * neither the board nor a box.
+     */
+    private Rect placeInfo(double width, double height) {
+        double side = board.width();
+        double d = side * INFO;
+        double gap = side * GAP;
+        Rect yellow = boxes.get(PlayerColor.YELLOW);
+        List<Rect> spots = List.of(
+                new Rect(width - gap - d, gap, d, d),
+                new Rect(yellow.x() + yellow.width() - d, yellow.y() + yellow.height() + gap, d, d),
+                new Rect(width - gap - d, height - gap - d, d, d),
+                new Rect(gap, gap, d, d));
+        for (Rect spot : spots)
+            if (isFree(spot, width, height))
+                return spot;
+        return spots.get(0);
+    }
+
+    private boolean isFree(Rect spot, double width, double height) {
+        if (!spot.inside(width, height) || spot.overlaps(board))
+            return false;
+        return boxes.values().stream().noneMatch(spot::overlaps);
     }
 
     /** Lays out a panel of {@code width} x {@code height} pixels. */
@@ -83,7 +116,7 @@ public final class TableLayout {
             boxes.put(PlayerColor.RED, new Rect(bx, bottom, bw, bh));
             boxes.put(PlayerColor.BLUE, new Rect(bx + side - bw, bottom, bw, bh));
         }
-        return new TableLayout(board, boxes);
+        return new TableLayout(board, boxes, width, height);
     }
 
     public Rect board() {
@@ -97,5 +130,10 @@ public final class TableLayout {
 
     public Rect box(PlayerColor colour) {
         return boxes.get(colour);
+    }
+
+    /** The round "i" button that opens the symbol legend (its bounding square). */
+    public Rect info() {
+        return info;
     }
 }

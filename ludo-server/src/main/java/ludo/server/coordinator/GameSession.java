@@ -1,5 +1,6 @@
 package ludo.server.coordinator;
 
+import ludo.game.EndCondition;
 import ludo.server.config.ServerConfig;
 import ludo.server.config.ServerLog;
 import ludo.server.coordinator.state.Reply;
@@ -37,6 +38,7 @@ public final class GameSession {
     private final String id;
     private final long seed;
     private final long turnDelayMs;
+    private final EndCondition endCondition;
     private final ServerConfig config;
     private final ServerLog log;
     private final BlockingQueue<Command> queue;
@@ -51,10 +53,16 @@ public final class GameSession {
     private volatile boolean closed;
     private volatile GameOverEvent result;
 
+    /** A game that ends as the server's config says ({@link ServerConfig#endCondition()}). */
     public GameSession(String id, long seed, long turnDelayMs, ServerConfig config, ServerLog log) {
+        this(id, seed, turnDelayMs, config.endCondition(), config, log);
+    }
+
+    public GameSession(String id, long seed, long turnDelayMs, EndCondition endCondition, ServerConfig config, ServerLog log) {
         this.id = id;
         this.seed = seed;
         this.turnDelayMs = turnDelayMs;
+        this.endCondition = endCondition;
         this.config = config;
         this.log = log;
         this.queue = new ArrayBlockingQueue<>(config.queueCapacity());
@@ -149,6 +157,11 @@ public final class GameSession {
 
     public long turnDelayMs() {
         return turnDelayMs;
+    }
+
+    /** When this game ends (Rule 11): at the first winner or when every place is decided. */
+    public EndCondition endCondition() {
+        return endCondition;
     }
 
     public long version() {

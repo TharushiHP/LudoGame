@@ -2,6 +2,8 @@ package ludo.server.http;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import ludo.game.EndCondition;
+import ludo.server.config.ServerConfig;
 import ludo.server.config.ServerLog;
 import ludo.server.coordinator.GameSession;
 import ludo.server.coordinator.SessionRegistry;
@@ -30,7 +32,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * it parses the request, then either reads an immutable published value (GET /state, GET /games)
  * or hands the request to the game's queue and returns the game thread's reply.
  * <pre>
- * POST /games                    {seed?, turnDelayMs?}  -> 201 {gameId, seed, turnDelayMs}
+ * POST /games                    {seed?, turnDelayMs?, endCondition?}  -> 201 {gameId, seed, turnDelayMs, endCondition}
  * GET  /games                                           -> {games: [...]}
  * GET  /games/{id}                                      -> one game's summary (incl. taken colours)
  * POST /games/{id}/join          {colour, clientName, triesOtherPiecesWhenBlocked}
@@ -119,11 +121,21 @@ final class GamesHandler implements HttpHandler {
             HttpReplies.send(exchange, Reply.badRequest("turnDelayMs must not be negative"));
             return;
         }
-        GameSession session = registry.create(seed, delay);
+        EndCondition endCondition = null;
+        if (json.get("endCondition") != null) {
+            try {
+                endCondition = ServerConfig.parseEndCondition(String.valueOf(json.get("endCondition")));
+            } catch (IllegalArgumentException e) {
+                HttpReplies.send(exchange, Reply.badRequest(e.getMessage()));
+                return;
+            }
+        }
+        GameSession session = registry.create(seed, delay, endCondition);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("gameId", session.id());
         body.put("seed", session.seed());
         body.put("turnDelayMs", session.turnDelayMs());
+        body.put("endCondition", session.endCondition().name());
         HttpReplies.send(exchange, 201, body);
     }
 
@@ -186,6 +198,7 @@ final class GamesHandler implements HttpHandler {
         json.put("taken", taken);
         json.put("seed", session.seed());
         json.put("turnDelayMs", session.turnDelayMs());
+        json.put("endCondition", session.endCondition().name());
         return json;
     }
 

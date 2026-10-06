@@ -46,7 +46,16 @@ final class ServerFixture implements AutoCloseable {
     }
 
     String createGame(long seed) throws Exception {
-        HttpResponse<String> response = post("/games", "{\"seed\":" + seed + "}");
+        return createGame("{\"seed\":" + seed + "}");
+    }
+
+    /** A game with an explicit end condition ("FIRST_WINNER" or "ALL_PLACES"). */
+    String createGame(long seed, String endCondition) throws Exception {
+        return createGame("{\"seed\":" + seed + ",\"endCondition\":\"" + endCondition + "\"}");
+    }
+
+    private String createGame(String body) throws Exception {
+        HttpResponse<String> response = post("/games", body);
         if (response.statusCode() != 201)
             throw new IllegalStateException("POST /games failed: " + response.statusCode() + " " + response.body());
         return (String) JsonParser.parseObject(response.body()).get("gameId");

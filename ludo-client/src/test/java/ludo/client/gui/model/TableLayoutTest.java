@@ -37,6 +37,18 @@ class TableLayoutTest {
         }
     }
 
+    @ParameterizedTest(name = "{0} x {1}")
+    @CsvSource({"1536, 780", "1366, 700", "1229, 693", "800, 600", "640, 480", "600, 900"})
+    void theInfoButtonFitsWithoutCoveringAnything(int width, int height) {
+        TableLayout t = TableLayout.of(width, height);
+        Rect info = t.info();
+        assertTrue(info.inside(width, height), "info button " + info + " is clipped");
+        assertFalse(info.overlaps(t.board()), "info button covers the board");
+        for (PlayerColor colour : PlayerColor.values())
+            assertFalse(info.overlaps(t.box(colour)), "info button covers the " + colour + " box");
+        assertEquals(t.board().width() * TableLayout.INFO, info.width(), 1e-9);
+    }
+
     @Test
     void eachBoxIsNextToItsOwnBase() {
         TableLayout t = TableLayout.of(1536, 780);

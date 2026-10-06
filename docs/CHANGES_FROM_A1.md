@@ -190,6 +190,31 @@ ludo-core was **not changed**, and the golden master still passes. `ludo-client`
 
 Animation uses a `javax.swing.Timer`, so its work runs on the Event Dispatch Thread; no new thread was added (see docs/THREADS.md).
 
+## Task 9: first-winner ending, colour names only, symbol legend
+
+**Not changed:** the protocol events, the threads, the ACK cycle and every rule except when the game ends. `ConsoleSimulation` and the golden master are byte-identical.
+
+**Why**
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | New `ludo.game.EndCondition { ALL_PLACES, FIRST_WINNER }`, set with `GameBuilder.withEndCondition` (default **ALL_PLACES**). One predicate `Game.isOver()` replaces the `activePlayers() <= 1` / `> 1` checks in `mainLoop` and `isRoundCapReached`. For ALL_PLACES it is the same expression as before; for FIRST_WINNER it is "at least one player is ranked". | **Interpretation of Rule 11.** The brief says that after the first player wins, the game *may* continue. Both readings are valid, so both are supported. A1 (Task 2, change 1) chose "continue until every place is decided". For a networked game with four people watching, stopping at the winner is the natural ending, and a game takes minutes, not much longer. |
+| 2 | FIRST_WINNER ends with status `FINISHED` and one extra log line: `The game ends with the first winner (Rule 11): the other players are not ranked.` The usual "Red player wins!!!", the standings (other players as `Not ranked`) and "Game finished after ..." print as before. The winner's turn already stops after the finishing roll. | The game log still says plainly why it ended and who is placed. GAME_OVER already carries the status and the finishing positions, so no protocol change was needed. |
+| 3 | The **server** defaults to FIRST_WINNER (`ServerConfig.endCondition`, `--end-condition=FIRST_WINNER\|ALL_PLACES`, `"endCondition"` in `POST /games`, an unknown value gets 400). The **console** keeps ALL_PLACES. | The console simulation is the A1 behaviour and the golden master records it byte for byte. Keeping it unchanged proves that the refactoring changed nothing else. |
+| 4 | **One existing test changed:** `ServerGameTest.remoteGameLogMatchesTheConsoleGoldenMaster` now creates its game with `ALL_PLACES` (through the new `ServerFixture.createGame(seed, endCondition)`). | That test compares a remote game with the console's golden file, which plays all places. With the new server default the remote game would stop earlier, so the two logs could not match. The comparison itself is unchanged. |
+| 5 | The strategy words ("Aggressive", "Blocker", "Speedrunner", "Cyclic") were removed from the game window (player boxes, box tooltips, winner screen) and the connect window. `Palette.strategy` is gone. The boxes show the colour name only, plus the YOU / computer / place tags. | The players are identified by colour. The strategies are still there (Strategy pattern in ludo-players, unchanged); they decide moves, but they are not a label the user needs on screen. |
+| 6 | A round **"i" button** opens a **symbol legend** (`LegendOverlay`); a click anywhere or Esc closes it. Each symbol is drawn by the board's own painter code, so a few package-private helpers were extracted: `TokenPainter.directionBadge`, `captureDot`, `effectBadge`, and `BoardPainter.paintCell`, `paintStartCell`, `paintApproachCircle`, `paintGreek`, `paintMysteryAt`. The board and tokens draw exactly as before. | Task 8 moved the old dashboard legend off the screen. The badges and cell markings need an explanation that is one click away. Reusing the painters (Don't Repeat Yourself) means the legend can never show a look-alike that differs from the board. |
+| 7 | **Winner screen:** `Ending.of(GameOverEvent)` (pure, tested) returns FIRST_WINNER when the game FINISHED with exactly one colour placed. `WinnerOverlay` then shows a large "RED WINS!" in the winner's colour and nothing about the others. Every other ending keeps the podium. | A first-winner ending has no 2nd-4th places, so a podium would be mostly empty and misleading. |
+
+**What was added**
+
+| What | Pattern / principle |
+|---|---|
+| ludo-core: `EndCondition`, `GameBuilder.withEndCondition`, `Game.isOver()` | Builder; Open/Closed (the end rule is a value, not a subclass) |
+| ludo-server: `ServerConfig.endCondition` + `parseEndCondition`, `ServerMain --end-condition`, `SessionRegistry.create(seed, delay, endCondition)`, `GameSession.endCondition()`, `Coordinator` passes it to `GameBuilder`, `GamesHandler` reads and reports `endCondition` | |
+| ludo-client: `GameSummary.endCondition` (missing = ALL_PLACES) and the connect window's **Ends at** column; `TableLayout.info()`; `LegendOverlay`; `Ending`; the Esc key binding in `GameWindow` | Humble object: `TableLayout` and `Ending` are pure and tested, the Swing classes only draw |
+| Tests: `EndConditionTest` (core), `ServerEndConditionTest` and a `ServerMainTest` case (server), `EndingTest`, `TableLayoutTest` (info button fits at every size), `TablePanelTest` (legend opens/closes, colour-only tooltips, both winner screens), `HttpServerGatewayTest` (endCondition read) | |
+
 ## Open issues
 - A1 classes still without a class Javadoc (not touched by Task 5): `Coin`, `Dice`, `RandomSource`, `GameEventListener`, `MoveResult`.
 - Task 6: the server keeps no saved state on shutdown yet; that comes with the database task. Missed events are not replayed after a reconnect: the client gets the current full STATE instead, which is enough because every STATE is complete. Log lines of missed STATEs are therefore not re-sent.

@@ -6,13 +6,15 @@ import java.io.IOException;
 
 /**
  * Entry point of the coordinator server (the runnable jar's main class).
- * Options: {@code --port=8080 --turn-delay=500 --move-timeout=10000} (milliseconds).
+ * Options: {@code --port=8080 --turn-delay=500 --move-timeout=10000} (milliseconds) and
+ * {@code --end-condition=FIRST_WINNER|ALL_PLACES} (Rule 11; default FIRST_WINNER).
  * A shutdown hook (Ctrl+C) stops the server cleanly; see {@link LudoServer#stop()}.
  * The console simulation is still available as {@link ConsoleSimulation}.
  */
 public final class ServerMain {
 
-    static final String USAGE = "Usage: java -jar ludo-server.jar [--port=8080] [--turn-delay=500] [--move-timeout=10000]";
+    static final String USAGE = "Usage: java -jar ludo-server.jar [--port=8080] [--turn-delay=500] [--move-timeout=10000]"
+            + " [--end-condition=FIRST_WINNER|ALL_PLACES]";
 
     private ServerMain() {}
 
@@ -42,6 +44,10 @@ public final class ServerMain {
             String[] keyValue = arg.split("=", 2);
             if (keyValue.length != 2)
                 throw new IllegalArgumentException("Unknown option: " + arg);
+            if (keyValue[0].equals("--end-condition")) {
+                config = config.withEndCondition(ServerConfig.parseEndCondition(keyValue[1]));
+                continue;
+            }
             long value = number(arg, keyValue[1]);
             switch (keyValue[0]) {
                 case "--port" -> {

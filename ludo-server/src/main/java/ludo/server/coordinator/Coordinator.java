@@ -78,6 +78,7 @@ final class Coordinator implements CoordinatorContext {
             log.log("all four colours joined; game " + session.id() + " starts with seed " + session.seed());
             game = new GameBuilder()
                     .withSeed(session.seed())
+                    .withEndCondition(session.endCondition())
                     .withMoveDecider(new RemoteMoveDecider(this))
                     .withTurnGate(new RemoteTurnGate(this))
                     .withListener(gameLog)

@@ -113,6 +113,18 @@ class HttpServerGatewayTest {
             assertTrue(games.get(0).isTaken(PlayerColor.RED));
             assertTrue(games.get(0).isTaken(PlayerColor.BLUE));
             assertFalse(games.get(0).isTaken(PlayerColor.GREEN));
+            assertFalse(games.get(0).endsAtFirstWinner(), "no endCondition field: an older server plays all places");
+        }
+    }
+
+    @Test
+    void gameListReadsTheEndCondition() throws Exception {
+        try (StubServer server = new StubServer("/games", exchange -> reply(exchange, 200,
+                "{\"games\":[{\"gameId\":\"4\",\"state\":\"WaitingForPlayers\",\"version\":0,\"joined\":0,"
+                        + "\"taken\":[],\"seed\":7,\"turnDelayMs\":500,\"endCondition\":\"FIRST_WINNER\"}]}"))) {
+            GameSummary game = gateway(server).listGames().get(5, TimeUnit.SECONDS).get(0);
+            assertEquals("FIRST_WINNER", game.endCondition());
+            assertTrue(game.endsAtFirstWinner());
         }
     }
 

@@ -6,7 +6,7 @@ import java.awt.Color;
 import java.awt.Font;
 
 /**
- * The game's colours, fonts and player labels in one place (Single Source of Truth for the look).
+ * The game's colours and fonts in one place (Single Source of Truth for the look).
  * The board colours are the bright, saturated ones of Figure 1 in the brief; the tokens use a
  * deeper shade of the same colour so they stand out even on their own base.
  */
@@ -62,16 +62,6 @@ public final class Palette {
     /** Text colour that is readable on {@link #token(PlayerColor)}. */
     public static Color textOn(PlayerColor colour) {
         return colour == PlayerColor.YELLOW ? Color.BLACK : Color.WHITE;
-    }
-
-    /** Each player's behaviour from the brief, as the player box shows it: "Red · Aggressive". */
-    public static String strategy(PlayerColor colour) {
-        return switch (colour) {
-            case RED -> "Aggressive";
-            case GREEN -> "Blocker";
-            case YELLOW -> "Speedrunner";
-            case BLUE -> "Cyclic";
-        };
     }
 
     /** {@code a} moved towards {@code b} by {@code amount} (0 = a, 1 = b). */

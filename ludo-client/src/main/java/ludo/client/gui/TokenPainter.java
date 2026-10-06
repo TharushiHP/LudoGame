@@ -88,14 +88,21 @@ final class TokenPainter {
     }
 
     private static void paintBadges(Graphics2D g, PieceSnapshot piece, double cx, double cy, double r) {
+        directionBadge(g, cx, cy, r, piece.direction() == Direction.CLOCKWISE);
+        if (piece.hasCapture())
+            captureDot(g, cx, cy, r);
+        if (piece.effect() != EffectKind.NONE)
+            effectBadge(g, piece.effect(), cx + r * 0.72, cy + r * 0.72, r * 0.36);
+    }
+
+    /** The direction badge (↻ or ↺, T-1) at the top-right of the token centred on (cx, cy) with radius r. */
+    static void directionBadge(Graphics2D g, double cx, double cy, double r, boolean cw) {
         double b = r * 0.36; // badge radius
-        // Direction, top-right.
         double dx = cx + r * 0.72, dy = cy - r * 0.72;
         badge(g, dx, dy, b, Color.WHITE);
         g.setColor(new Color(30, 30, 30));
         g.setStroke(new BasicStroke((float) Math.max(1, b * 0.28), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         double a = b * 0.55;
-        boolean cw = piece.direction() == Direction.CLOCKWISE;
         g.draw(new Arc2D.Double(dx - a, dy - a, a * 2, a * 2, cw ? 120 : 60, cw ? -270 : 270, Arc2D.OPEN));
         // Arrowhead at the end of the arc (angle 210° for clockwise, -30° for counterclockwise).
         double end = Math.toRadians(cw ? 210 : -30);
@@ -109,21 +116,20 @@ final class TokenPainter {
         head.lineTo(ex + ty * h * 0.8, ey - tx * h * 0.8);
         head.closePath();
         g.fill(head);
-        // Captured at least once, top-left.
-        if (piece.hasCapture()) {
-            double gx = cx - r * 0.78, gy = cy - r * 0.78, gr = b * 0.62;
-            g.setColor(new Color(255, 200, 0));
-            g.fill(circle(gx, gy, gr));
-            g.setColor(new Color(120, 80, 0));
-            g.setStroke(new BasicStroke((float) Math.max(1, gr * 0.3)));
-            g.draw(circle(gx, gy, gr));
-        }
-        // Effect, bottom-right.
-        if (piece.effect() != EffectKind.NONE)
-            paintEffect(g, piece.effect(), cx + r * 0.72, cy + r * 0.72, b);
     }
 
-    private static void paintEffect(Graphics2D g, EffectKind effect, double x, double y, double b) {
+    /** The gold "has captured" dot (T-7) at the top-left of the token centred on (cx, cy) with radius r. */
+    static void captureDot(Graphics2D g, double cx, double cy, double r) {
+        double gx = cx - r * 0.78, gy = cy - r * 0.78, gr = r * 0.36 * 0.62;
+        g.setColor(new Color(255, 200, 0));
+        g.fill(circle(gx, gy, gr));
+        g.setColor(new Color(120, 80, 0));
+        g.setStroke(new BasicStroke((float) Math.max(1, gr * 0.3)));
+        g.draw(circle(gx, gy, gr));
+    }
+
+    /** An effect badge (T-12, T-13) centred on (x, y) with radius b: lightning, "½" or a pause sign. */
+    static void effectBadge(Graphics2D g, EffectKind effect, double x, double y, double b) {
         switch (effect) {
             case ENERGIZED -> {
                 badge(g, x, y, b, new Color(255, 140, 0));
