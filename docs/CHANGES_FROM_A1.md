@@ -134,6 +134,35 @@ ludo-core was **not changed**. The golden master (seeds 1–20) still passes byt
 | D8 | (none) | A STATE whose snapshot is no longer IN_PROGRESS (the final one) needs no ACK | There is no next turn to hold back. |
 | D9 | (none) | Interrupted while waiting for a DECISION: the local strategy answers, the interrupt flag is restored, and the game ends as ABORTED at the next `afterRoll`. | `MoveDecider` cannot throw `InterruptedException`, and core was not to change. |
 
+## Task 7: thick client (no rule change)
+
+ludo-core was **not changed**, and the golden master still passes. `ludo-client` replaces its placeholder with the real client: a Swing window (or a console with `--headless`) that renders the server's snapshots, runs its colour's strategy and takes part in the lockstep ACK cycle. It depends only on ludo-shared and ludo-players (JDK classes otherwise), and never applies game rules itself.
+
+**What was added**
+
+| # | What | Pattern / principle | Why |
+|---|---|---|---|
+| 1 | `ServerGateway` (interface) and `HttpServerGateway` (`java.net.http.HttpClient`, async). `RetryPolicy`: on an I/O error, timeout or 503, the **same** request (same requestId) is sent again after 250 ms, doubling up to 2 s, at most 6 tries. Other 4xx replies are never retried. | Remote Proxy; Dependency Inversion | The controller calls plain methods and does not know about HTTP. Re-sending the same requestId is safe because the server is an Idempotent Receiver (Task 6). |
+| 2 | `SseFrameParser` (pure, fed one line at a time) and `EventStreamListener` (daemon thread `event-stream`). It reconnects with `Last-Event-ID` and backoff (0.5, 1, 2, 4, then 5 s) and stops after GAME_OVER. | Single Responsibility (parsing apart from I/O) | The parser can be unit-tested without a network. The listener only reads and hands events on. |
+| 3 | `ClientController` on one daemon thread `client-controller` that takes events from a `LinkedBlockingQueue`. STATE: hash check, then wait until the view has **applied** the state, then ACK. ROLL for its own colour. DECISION on the `decision-worker` thread, using `SnapshotStrategyDecider` on the request's snapshot (Blue's memo included). | Thread confinement; Producer–Consumer | One thread gives one order of events without locks. An ACK means "this client shows this version", not just "received". |
+| 4 | `GameView` port with `SwingGameView` and `ConsoleGameView` as its implementations. | Observer / port; Dependency Inversion; Open/Closed | The controller knows nothing about Swing. That is what makes it testable with a fake view, and the console view needed no controller change. |
+| 5 | Strategies reused unchanged through `SnapshotStrategyDecider` (ludo-players). JOIN sends `triesOtherPiecesWhenBlocked` from the strategy (false for Blue). | Strategy (A1, reused); Adapter (Task 4) | The client plays exactly as the console game does. |
+| 6 | GUI: `ConnectWindow`, `MainWindow` (header, board, four player panels, log, status bar), `BoardPanel` and `BoardLayout`. Every cell's grid square is computed from `BoardConstants` / `PathMath` and not hard-coded. `Palette` holds one colour per player and the fonts. | Composite (MainWindow arranges panels); Single Source of Truth | The board picture cannot drift from the rules' numbering. `BoardLayout` is pure and unit-tested. |
+| 7 | `ClientMain` + `ClientOptions` (`--server --game --colour --name --headless`), `ClientSession` (composition root: stream first, then JOIN). Shaded runnable jar `ludo-client.jar`. | Composition root | Opening the stream before the JOIN means the client never misses the first STATE. |
+| 8 | Tests: `BoardLayoutTest`, `BoardConstantsFigureTest`, `SseFrameParserTest`, `ClientControllerTest` (fake gateway and view), `HttpServerGatewayTest` (JDK `HttpServer` stub: dropped connection and 503, then the same requestId), `EventStreamListenerTest`, `ClientOptionsTest`. | (testing) | They prove the client side of the protocol without a GUI. |
+| 9 | `scripts/start-demo.bat`, `docs/RUNNING.md`, the client section of `docs/THREADS.md`. | (docs) | One-PC demo and LAN set-up. |
+
+**Deviations and decisions**
+
+| # | Planned / expected | Now | Why |
+|---|---|---|---|
+| D10 | (open) What a client does when its hash differs from the server's | It shows a red "Out of sync" badge and ACKs with the hash **it computed itself**, never the server's. The server's `AwaitingAcks` replies 409 and sends the STATE again. | Your decision. Copying the server's hash would hide the problem. |
+| D11 | Clients could not see which colours are free | Small server change: `GET /games` and `GET /games/{id}` now include `"taken": [...]`, published by the game thread as an immutable set in a `volatile` field (same pattern as `joined`). `ServerProtocolTest` asserts it. | The connect window greys out taken colours. |
+| D12 | `ludo.client.ClientApp` placeholder | Removed; `ludo.client.ClientMain` is the entry point. | The name matches `ServerMain`. |
+| D13 | The board path should move between orthogonal neighbours | Figure 1's path has 4 **diagonal** steps at the inner corners (4→5, 17→18, 30→31, 43→44). `BoardLayoutTest` checks king-move neighbours and asserts that exactly these 4 steps are diagonal. | They are the standard Ludo corner hops in Figure 1. The test stays strict. |
+| D14 | Plan: "the window close calls `System.exit`" | `DISPOSE_ON_CLOSE`: all client threads are daemons, so the JVM ends by itself once the window is gone. Checked at runtime: closing a window ends the process with exit code 0. | No `System.exit` is needed, and nothing is cut off. |
+| D15 | (found while running the demo) | `MainWindow` shrinks itself to the usable screen area when its packed size is larger, and is then placed top-left. The game log has a minimum height of 120 px, so the board shrinks instead of the log. | On a 1920×1080 screen at 125 % scaling (1536×816 usable), the packed window was 882 px tall, so the status bar (Paused / Game over) was off-screen. The board scales, so a smaller window still shows everything. |
+
 ## Open issues
 - A1 classes still without a class Javadoc (not touched by Task 5): `Coin`, `Dice`, `RandomSource`, `GameEventListener`, `MoveResult`.
 - Task 6: the server keeps no saved state on shutdown yet; that comes with the database task. Missed events are not replayed after a reconnect: the client gets the current full STATE instead, which is enough because every STATE is complete. Log lines of missed STATEs are therefore not re-sent.

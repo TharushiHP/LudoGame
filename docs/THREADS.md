@@ -30,3 +30,27 @@ The flags below were checked in a running server with `Thread.getAllStackTraces(
 | Event-stream list | changed by HTTP workers (connect) and `sse-writer-<id>` (failed write) | `CopyOnWriteArrayList`: safe to read from any thread. |
 | Sockets of the event streams | `sse-writer-<id>` once the stream is registered | The HTTP worker that opens a stream writes only its first `retry:` line, before registering it. For a game that is already over, it writes the final STATE and GAME_OVER itself, and the stream is never registered. |
 | All games | `ConcurrentHashMap` in `SessionRegistry` | Any thread; ids come from an `AtomicLong`. |
+
+# Client threads (ludo-client)
+
+Checked in a running GUI client (Red, game 2 on a live server) with `Thread.getAllStackTraces()` and `Thread.isDaemon()`. The rule is the same as on the server, but the reasons point the other way: in the client only the **GUI** (or, headless, the `main` thread waiting for GAME_OVER) may keep the JVM alive. Every thread the client starts itself is a daemon. So when the window is closed, the JVM ends by itself, even if a thread is still blocked on the network. The window uses `DISPOSE_ON_CLOSE`, not `System.exit`: once the last window is disposed, AWT ends the Event Dispatch Thread, only daemons are left and the JVM exits (checked: closing a client window ends the process with exit code 0).
+
+| Thread | Created by | Daemon? (runtime) | Why | How it stops |
+|---|---|---|---|---|
+| `main` | JVM | no | Parses the options. **GUI:** it hands the window to the EDT with `invokeLater`, then returns. **Headless:** it starts the session and waits on the GAME_OVER latch, which keeps the JVM alive until the game is over. | GUI: returns at once. Headless: returns after GAME_OVER, then the JVM exits. |
+| `AWT-EventQueue-0` (EDT) | JDK (Swing) | **no** | All Swing work: building the windows, and applying every STATE, request, PAUSED and GAME_OVER (`SwingGameView` uses `invokeLater`). Non-daemon, so it is what keeps a GUI client running. | AWT ends it after the last window is disposed. |
+| `AWT-Shutdown` | JDK (AWT) | no | AWT's helper that keeps AWT alive while windows exist. It is not started by our code. | Ends together with the EDT. |
+| `client-start` | `ClientMain.openGame` | yes | One-off: opens the event stream (waits up to 10 s for it) and sends JOIN, so the EDT is never blocked on the network. | Ends after the JOIN. It was already gone at the time of the dump. |
+| `event-stream` | `EventStreamListener` | **yes** | Blocking read of the SSE stream (`GET .../events`). It turns each frame into a `ServerEvent` and puts it on the controller's queue, and reconnects with backoff when the stream drops. A daemon, because a blocking socket read must never keep the JVM alive after the window is closed. | `close()` when the window closes, or by itself after GAME_OVER. |
+| `client-controller` | `ClientController` | **yes** | Takes events from its `LinkedBlockingQueue` one by one (one order, no locks): checks the hash, waits for the view to apply a STATE, then ACKs; sends ROLL; hands decisions to the worker. A daemon because the EDT (or headless `main`) decides how long the client lives. | `stop()` when the window closes (interrupt). |
+| `decision-worker` | `ClientController` (single-thread executor) | **yes** | Runs the colour's strategy (`SnapshotStrategyDecider`) on the request's snapshot and sends the DECISION, so the controller keeps taking events in the meantime. A short CPU task only. | `shutdownNow()` in `stop()`. |
+| `HttpClient-N-Worker-*`, `HttpClient-N-SelectorManager` | JDK `java.net.http.HttpClient` | yes | Run the async requests (JOIN, ROLL, DECISION, ACK and their retries) and the stream's I/O. | Belong to the JDK; end with the JVM. |
+| `AWT-Windows`, `TimerQueue`, `Java2D Disposer`, `DND Screen Updater`, `ForkJoinPool.commonPool-*`, `Common-Cleaner` | JDK | yes | JDK internals (native window events, Swing timers such as tooltips, `CompletableFuture` callbacks). | End with the JVM. |
+
+**Which thread touches what (client)**
+
+| Data | Owner | How other threads see it |
+|---|---|---|
+| Swing components | EDT only | Other threads call `SwingGameView`, which uses `invokeLater`. `showState` returns a `CompletableFuture` that the EDT completes **after** it has applied the state, and only then does the controller ACK. |
+| Event order | `client-controller` | `event-stream` only puts events on the `LinkedBlockingQueue`. |
+| Last-Event-ID, backoff | `event-stream` only | Not shared. |

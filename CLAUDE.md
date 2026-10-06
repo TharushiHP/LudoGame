@@ -23,7 +23,7 @@ University assignment (COMP63038 Clean Coding & Concurrent Programming, Assignme
 | ludo-players | ludo.players: the four MoveStrategy behaviours, StrategyFactory, SnapshotStrategyDecider. Decide from snapshots only | ludo-shared |
 | ludo-core | ludo.board, dice, effect, game, piece, player: the rules and the one authoritative board | ludo-shared (ludo-players at test scope only) |
 | ludo-server | ludo.server: ServerMain (runnable jar), LudoServer, ConsoleSimulation; ludo.server.config (ServerConfig, ServerLog, NamedThreadFactory); ludo.server.coordinator (GameSession, Coordinator, CommandLoop, Broadcaster, RemoteTurnGate, RemoteMoveDecider, ...); ludo.server.coordinator.state (the 7 coordinator states, AckBarrier, Reply); ludo.server.http (LudoHttpServer, GamesHandler, SseSink); ludo.output.GameLogger; GoldenMasterTest + golden files | ludo-core, ludo-players |
-| ludo-client | placeholder (ludo.client.ClientApp) | nothing yet |
+| ludo-client | ludo.client: ClientMain (runnable jar), ClientOptions, ClientSession; ludo.client.net (ServerGateway, HttpServerGateway Remote Proxy, RetryPolicy, SseFrameParser, EventStreamListener); ludo.client.control (ClientController, GameView port, Identity); ludo.client.gui (Swing: ConnectWindow, MainWindow, BoardPanel, BoardLayout, ...); ludo.client.console (ConsoleGameView, headless) | ludo-shared, ludo-players |
 | ludo-testclients | placeholder (ludo.testclients.TestClientsApp) | nothing yet |
 | database/ | SQL scripts (not created yet) | |
 
@@ -36,6 +36,10 @@ GameBuilder (core) has no default MoveDecider; the caller must pass one (Console
 - Run the coordinator server: `java -jar ludo-server/target/ludo-server.jar --port=8080 --turn-delay=500 --move-timeout=10000` (after `package`; all options optional, values in ms)
 - Run the console simulation: `java -cp ludo-server/target/ludo-server.jar ludo.server.ConsoleSimulation --seed=7`
 - Server tests only: `./mvnw test -pl ludo-server -am`
+- Client tests only: `./mvnw test -pl ludo-client -am`
+- Run a client: `java -jar ludo-client/target/ludo-client.jar` (connect window), or `--server=URL --game=ID --colour=RED|GREEN|YELLOW|BLUE|SPECTATOR [--name=TEXT] [--headless]` to skip it
+- One-PC demo (server + 4 clients, game 1, seed 7): `scripts\start-demo.bat`; server output also in logs\server.log
+- LAN set-up, client options and troubleshooting: docs/RUNNING.md
 - Golden files live in ludo-server/src/test/resources/golden. Never regenerate them unless a behaviour change is intended and approved.
 
 ## Consistency (top priority)
@@ -51,6 +55,7 @@ All four players must see the same game at the same time. Mechanisms:
 
 ## Threads
 Be explicit about daemon vs non-daemon threads and justify each: see docs/THREADS.md (keep it up to date). Shutdown hook (`shutdown-hook`) refuses new requests, interrupts game threads (games end ABORTED, GAME_OVER is sent, queues are drained with 409), closes event streams, then stops the HTTP server. Saving state is added with the database task.
+Client: every thread the client starts (`event-stream`, `client-controller`, `decision-worker`, `client-start`) is a daemon; only the EDT (GUI) or the headless `main` waiting for GAME_OVER keeps the JVM alive. The window uses DISPOSE_ON_CLOSE, not System.exit. A client ACKs a STATE only after the view has applied it, always with its own hash.
 
 ## Working rules
 - Design patterns and SOLID principles from Assignment 1 must be preserved. Any change, removal or corrected label must be recorded in docs/CHANGES_FROM_A1.md with a reason.

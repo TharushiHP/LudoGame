@@ -16,7 +16,9 @@ import javax.swing.JSplitPane;
 import javax.swing.WindowConstants;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
 import java.awt.GridLayout;
+import java.awt.Rectangle;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.EnumMap;
@@ -59,6 +61,7 @@ public final class MainWindow extends JFrame {
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, top, log);
         split.setResizeWeight(0.8);
         log.setPreferredSize(new Dimension(1000, 170));
+        log.setMinimumSize(new Dimension(0, 120)); // on a small screen the board shrinks, not the log
 
         getContentPane().add(header, BorderLayout.NORTH);
         getContentPane().add(split, BorderLayout.CENTER);
@@ -66,7 +69,22 @@ public final class MainWindow extends JFrame {
         // Dispose, not exit: when the window is gone only daemon threads remain and the JVM ends by itself.
         setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         pack();
-        setLocationByPlatform(true);
+        fitOnScreen();
+    }
+
+    /**
+     * On a small or scaled screen (e.g. 1920x1080 at 125 %) the packed window is taller than the
+     * screen and the status bar would be off-screen. The board scales with its panel, so the window
+     * is shrunk to the usable screen area and placed at its top-left; otherwise Windows places it.
+     */
+    private void fitOnScreen() {
+        Rectangle usable = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        if (getWidth() <= usable.width && getHeight() <= usable.height) {
+            setLocationByPlatform(true);
+            return;
+        }
+        setSize(Math.min(getWidth(), usable.width), Math.min(getHeight(), usable.height));
+        setLocation(usable.x, usable.y);
     }
 
     /** Runs {@code action} once the window has been closed (used to stop the client's threads). */
