@@ -18,6 +18,30 @@ class BoardLayoutTest {
     private final BoardLayout layout = new BoardLayout();
 
     @Test
+    void baseSlotsAreTheFourArmsOfTheCrossPiece1TopThenClockwise() {
+        for (PlayerColor colour : PlayerColor.values()) {
+            BoardLayout.Spot c = layout.baseCentre(colour);
+            List<BoardLayout.Spot> slots = layout.baseSlots(colour);
+            assertEquals(4, slots.size());
+            assertEquals(new BoardLayout.Spot(c.row() - 1, c.col()), slots.get(0), colour + " piece 1 is on the top arm");
+            assertEquals(new BoardLayout.Spot(c.row(), c.col() + 1), slots.get(1), colour + " piece 2 is on the right arm");
+            assertEquals(new BoardLayout.Spot(c.row() + 1, c.col()), slots.get(2), colour + " piece 3 is on the bottom arm");
+            assertEquals(new BoardLayout.Spot(c.row(), c.col() - 1), slots.get(3), colour + " piece 4 is on the left arm");
+            for (BoardLayout.Spot s : slots)
+                assertTrue(layout.base(colour).contains(new GridPos((int) Math.floor(s.row()), (int) Math.floor(s.col()))),
+                        s + " is inside " + colour + "'s base");
+        }
+    }
+
+    @Test
+    void baseCentresAreTheMiddleOfEachCornerAsInFigure1() {
+        assertEquals(new BoardLayout.Spot(3, 3), layout.baseCentre(PlayerColor.GREEN));
+        assertEquals(new BoardLayout.Spot(3, 12), layout.baseCentre(PlayerColor.YELLOW));
+        assertEquals(new BoardLayout.Spot(12, 3), layout.baseCentre(PlayerColor.RED));
+        assertEquals(new BoardLayout.Spot(12, 12), layout.baseCentre(PlayerColor.BLUE));
+    }
+
+    @Test
     void all52CellsAreOnDistinctSquares() {
         Set<GridPos> squares = new HashSet<>();
         for (int cell = 0; cell < BoardConstants.MAIN_PATH_SIZE; cell++)

@@ -4,7 +4,7 @@ rem   1. builds the jars if they are missing
 rem   2. starts the server in its own window (output also saved to logs\server.log)
 rem   3. waits until GET /health answers
 rem   4. creates game 1 with seed 7
-rem   5. starts the Red, Green, Yellow and Blue clients for game 1
+rem   5. opens the game window (spectator), then starts the four players headless
 rem For several PCs see docs\RUNNING.md.
 setlocal
 cd /d "%~dp0.."
@@ -56,14 +56,21 @@ echo Server is up. Creating game 1 (seed 7)...
 curl.exe -s -X POST -H "Content-Type: application/json" -d "{\"seed\":7}" %SERVER%/games
 echo.
 
-rem --colour is not case-sensitive, so the mixed-case names also give "Player Red" etc.
+rem The game window is a spectator (it never ACKs, so its animations never slow the game).
+rem It opens first so it shows the game from the very first move.
+echo Opening the game window (spectator)...
+start "" javaw -jar "%CLIENT_JAR%" --server=%SERVER% --game=1 --colour=SPECTATOR --name=Viewer
+ping -n 3 127.0.0.1 >nul
+
+rem The four players are separate client applications without a window (--headless), each in its
+rem own minimised console that prints its log. --colour is not case-sensitive.
 for %%C in (Red Green Yellow Blue) do (
-    echo Starting the %%C client...
-    start "" javaw -jar "%CLIENT_JAR%" --server=%SERVER% --game=1 --colour=%%C --name="Player %%C"
+    echo Starting the %%C player...
+    start "LUDO-T %%C player" /min java -jar "%CLIENT_JAR%" --server=%SERVER% --game=1 --colour=%%C --name="Player %%C" --headless
     ping -n 2 127.0.0.1 >nul
 )
 
 echo.
-echo Server and four clients started. The game begins when all four have joined.
+echo Server, game window and four players started. The game begins when all four have joined.
 echo Server log: logs\server.log
 endlocal

@@ -163,6 +163,33 @@ ludo-core was **not changed**, and the golden master still passes. `ludo-client`
 | D14 | Plan: "the window close calls `System.exit`" | `DISPOSE_ON_CLOSE`: all client threads are daemons, so the JVM ends by itself once the window is gone. Checked at runtime: closing a window ends the process with exit code 0. | No `System.exit` is needed, and nothing is cut off. |
 | D15 | (found while running the demo) | `MainWindow` shrinks itself to the usable screen area when its packed size is larger, and is then placed top-left. The game log has a minimum height of 120 px, so the board shrinks instead of the log. | On a 1920×1080 screen at 125 % scaling (1536×816 usable), the packed window was 882 px tall, so the status bar (Paused / Game over) was off-screen. The board scales, so a smaller window still shows everything. |
 
+## Task 8: one realistic game window (GUI only)
+
+**Not changed:** the protocol, the server, `ClientController`, the ACK timing, the threads and the rules. ludo-core and the golden master are untouched. Only `ludo.client.gui` and the demo script changed.
+
+**Why**
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | The board is drawn exactly like **Figure 1** of the brief. That covers: bases with a white diamond, a dashed inner diamond and a cross, with "Base" in the outer corner; X cells and approach circles on the same squares; Home triangles with "Home" facing outwards; a thick border. The LUDO-T additions (α β γ, the mystery glow) are kept small. | The brief defines the board, so a marker can check the GUI against its figure square by square. The geometry still comes from `BoardLayout`, `PathMath` and `BoardConstants`, never typed in. |
+| 2 | The dashboard (header, four detail panels, legend, log, status bar) became **one game window** with glossy tokens, dice, banners, toasts and a winner screen, like a real Ludo app. | The brief asks for a GUI that is easy to understand and updates live. A player of a real game sees the board, whose turn it is and what just happened, not raw data. LUDO-T state (direction, captures, effects, blocks) is shown on the tokens themselves, with hover texts for the details. |
+| 3 | The four players run as **separate headless client applications** (`--headless`, one console each). The demo's single window is a **spectator**. | The architecture is unchanged: four independent client processes, each with its own strategy, its own event stream and its own ACKs. That is what the architecture and concurrency criteria are about. One window then shows the shared game instead of four identical windows on one screen. A player can still have a window (e.g. on its own laptop). |
+| 4 | Technical information moved to the **server console** and a hidden **F2 developer view** (connection, ✓/✖ hash check, version/turn/round, raw log). | The evidence for consistency is still there for the demo and the marker, but it no longer clutters a player's screen. Only real problems show as toasts. |
+| 5 | **Animations are spectator-only.** `SwingGameView.showState` still completes as soon as the window has *applied* the state. In the spectator window the `Animator` then shows tokens walking towards that already-applied state, and snaps to the next state if one arrives mid-move. A player window draws every state at once. | A player's ACK means "this state is on my screen". If a player window animated, either its ACK would come before the screen showed the state, or the ACK (and so the whole game) would wait for the animation. The spectator never ACKs, so its animations cannot slow the game. |
+| 6 | `start-demo.bat` opens the spectator window **before** starting the players. | It then shows the game from the first move. Started last, it would only get the current state and miss the opening moves. |
+
+**What was added or removed**
+
+| What | Pattern / principle |
+|---|---|
+| Pure, unit-tested logic in `ludo.client.gui.model`: `TableLayout` (board and boxes for any window size), `PieceChange` (which tokens moved between two snapshots), `Route` + `Place` (the route shown, via `PathMath`: walk / enter / teleport / captured), `Banner` (log line → pop-up, patterns taken from the golden files), `DiceFaces` (pips, tumble faces, rolls in the log), `TokenText` (hover texts). | Single Responsibility; humble object: the Swing classes only draw what these compute |
+| Swing: `GameWindow` (replaces `MainWindow`), `TablePanel`, `BoardPainter`, `TokenPainter`, `DicePainter`, `Animator`, `Overlays`, `WinnerOverlay`, `DevOverlay`; `ConnectWindow` restyled ("Watch game" / "Play as ..."); `Palette` with the Figure 1 colours. | Composite (the window arranges painters and overlays); the `GameView` port is unchanged (Dependency Inversion) |
+| `BoardLayout.baseSlots` is now the four arms of each base's cross (piece 1 top, then clockwise, the same for every colour). New `baseCentre`; the Home slots moved below the "Home" label. Path and home-straight geometry are unchanged. | |
+| Removed: `MainWindow`, `HeaderPanel`, `PlayerPanel`, `EventLogPanel`, `StatusBar`, `BoardPanel` (+ legend). | |
+| Tests: `TableLayoutTest`, `RouteTest`, `BannerTest`, `DiceFacesTest`, `TokenTextTest`, `TablePanelTest` (hover texts; spectator animates, player window draws at once), new `BoardLayoutTest` cases for the base slots. | |
+
+Animation uses a `javax.swing.Timer`, so its work runs on the Event Dispatch Thread; no new thread was added (see docs/THREADS.md).
+
 ## Open issues
 - A1 classes still without a class Javadoc (not touched by Task 5): `Coin`, `Dice`, `RandomSource`, `GameEventListener`, `MoveResult`.
 - Task 6: the server keeps no saved state on shutdown yet; that comes with the database task. Missed events are not replayed after a reconnect: the client gets the current full STATE instead, which is enough because every STATE is complete. Log lines of missed STATEs are therefore not re-sent.

@@ -2,7 +2,7 @@ package ludo.client;
 
 import ludo.client.console.ConsoleGameView;
 import ludo.client.gui.ConnectWindow;
-import ludo.client.gui.MainWindow;
+import ludo.client.gui.GameWindow;
 import ludo.client.gui.SwingGameView;
 
 import javax.swing.SwingUtilities;
@@ -59,7 +59,7 @@ public final class ClientMain {
     /** Runs on the EDT: builds the window, then starts the session off the EDT (it waits for the stream). */
     private static void openGame(ConnectWindow.Choice choice) {
         useSystemLookAndFeel();
-        MainWindow window = new MainWindow(choice.identity(), choice.gameId(), choice.server());
+        GameWindow window = new GameWindow(choice.identity(), choice.gameId(), choice.server());
         ClientSession session = new ClientSession(choice.server(), choice.gameId(), choice.identity(), new SwingGameView(window));
         window.whenClosed(session::close);
         window.setVisible(true);

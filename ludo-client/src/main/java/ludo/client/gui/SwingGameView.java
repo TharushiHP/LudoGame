@@ -14,14 +14,19 @@ import java.util.concurrent.CompletableFuture;
 /**
  * The Swing implementation of the controller's {@link GameView} port (Adapter). Each call comes
  * from a client thread and is moved to the Event Dispatch Thread with {@code invokeLater}; Swing
- * components are only ever touched there. Nothing slow runs on the EDT: just setting labels and
+ * components are only ever touched there. Nothing slow runs on the EDT: just storing the state and
  * repainting.
+ * <p>
+ * {@link #showState} completes as soon as the window has <b>applied</b> the state, never after an
+ * animation: in the spectator window tokens then walk towards a state that is already applied,
+ * and a player window draws it at once (see {@link GameWindow}). So the controller's ACK timing
+ * is exactly as before.
  */
 public final class SwingGameView implements GameView {
 
-    private final MainWindow window;
+    private final GameWindow window;
 
-    public SwingGameView(MainWindow window) {
+    public SwingGameView(GameWindow window) {
         this.window = window;
     }
 

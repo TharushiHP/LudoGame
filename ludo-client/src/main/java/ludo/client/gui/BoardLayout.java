@@ -69,18 +69,32 @@ public final class BoardLayout {
         return YELLOW_BASE.rotateClockwise(quarterOf(colour));
     }
 
+    /** Centre of a colour's base, in grid units: the white centre square of its cross (Figure 1). */
+    public Spot baseCentre(PlayerColor colour) {
+        GridRect base = base(colour);
+        return new Spot(base.row() + base.height() / 2.0, base.col() + base.width() / 2.0);
+    }
+
     /**
      * Centres of the four piece places in a colour's base, in grid units (row, col), where the
-     * square (r, c) runs from r to r + 1. Index 0 is piece 1.
+     * square (r, c) runs from r to r + 1. They are the four coloured arms of the cross in Figure 1,
+     * one grid square each round the white centre: piece 1 top, 2 right, 3 bottom, 4 left. The
+     * order is the same for every colour (not turned with the quarter), so "piece 1 is at the top"
+     * holds on every base.
      */
     public List<Spot> baseSlots(PlayerColor colour) {
-        List<Spot> yellow = List.of(new Spot(2, 11), new Spot(2, 13), new Spot(4, 11), new Spot(4, 13));
-        return rotateAll(yellow, quarterOf(colour));
+        Spot c = baseCentre(colour);
+        return List.of(new Spot(c.row() - CROSS_ARM, c.col()), new Spot(c.row(), c.col() + CROSS_ARM),
+                new Spot(c.row() + CROSS_ARM, c.col()), new Spot(c.row(), c.col() - CROSS_ARM));
     }
+
+    /** Size of one square of a base's cross, in grid squares (Figure 1: the same as a path cell). */
+    public static final double CROSS_ARM = 1.0;
 
     /** Centres of the four piece places in a colour's triangle of the Home square (grid units). */
     public List<Spot> homeSlots(PlayerColor colour) {
-        List<Spot> yellow = List.of(new Spot(6.42, 6.95), new Spot(6.42, 7.5), new Spot(6.42, 8.05), new Spot(6.9, 7.5));
+        // Below the "Home" label (row 6.1-6.4), so a token never hides it.
+        List<Spot> yellow = List.of(new Spot(6.66, 6.98), new Spot(6.66, 7.5), new Spot(6.66, 8.02), new Spot(7.1, 7.5));
         return rotateAll(yellow, quarterOf(colour));
     }
 

@@ -32,11 +32,15 @@ The script:
 2. starts the server in its own window, "LUDO-T server" (`--turn-delay=500`), and also saves its output to `logs\server.log`,
 3. waits until `GET http://localhost:8080/health` answers,
 4. creates game 1 with seed 7 (`POST /games {"seed":7}`),
-5. starts the Red, Green, Yellow and Blue clients for game 1, one second apart.
+5. opens **the game window**, a maximised spectator view of game 1 (it opens first, so it shows the game from the first move),
+6. starts the four players, Red, Green, Yellow and Blue, as separate client applications **without a window** (`--headless`). Each runs in its own minimised console ("LUDO-T Red player" and so on), which prints that player's log.
 
-It refuses to start if a server is already running on port 8080, because the new game would then not be game 1. To stop the demo, close the four client windows and press Ctrl+C in the server window.
+It refuses to start if a server is already running on port 8080, because the new game would then not be game 1. To stop the demo, close the game window and the four player consoles, then press Ctrl+C in the server window.
 
-The four client windows open on top of each other. Drag them apart to compare them side by side.
+Where to look:
+- **Game window:** the game as a player of a real Ludo app sees it (section 4).
+- **Server console** (and `logs\server.log`): the technical record. Every request, state change and ACK, which thread handled it, the move timeouts and the game's own console messages.
+- **Player consoles:** each player's own copy of the log. All four are identical, because they apply the same STATEs in the same order.
 
 ## 3. Several PCs (LAN)
 
@@ -65,10 +69,14 @@ java -jar ludo-client.jar
 The **connect window** opens:
 1. **Server:** enter `http://<LAN-IP>:8080` (e.g. `http://192.168.1.20:8080`) and press **Refresh**. The table lists the server's games (state, how many joined, which colours are taken, seed, turn delay).
 2. No game yet? Press **New game...** (seed and turn delay are optional).
-3. Pick the game, then a colour under **Play as:**. Colours already taken are greyed out. Once a game has started, you can only **Spectate**.
-4. Optionally enter a **Name** (default "Player Red" and so on), then press **Connect**.
+3. Optionally enter **Your name** (default "Player Red" and so on).
+4. Pick the game, then one of the two choices:
+   - **Watch game**: opens the game window as a spectator, with animations.
+   - **Play as Red / Green / Yellow / Blue**: joins that colour. Colours already taken are pale and disabled. Once a game has started, you can only watch.
 
 The game starts as soon as all four colours have joined.
+
+**A player with a window** (e.g. one laptop per player) sees the same game window as a spectator, with **YOU** on its own player box. One difference: every state is drawn **at once**, with no token walk and no dice tumble. That player ACKs each state as soon as it is on screen, so its screen must never lag behind the game. Banners and toasts still appear. Players can also run without a window (`--headless`), as in the demo.
 
 To skip the connect window, give the game and colour on the command line:
 
@@ -83,7 +91,7 @@ java -jar ludo-client.jar --server=http://192.168.1.20:8080 --game=1 --colour=RE
 | `--server=URL` | server address (default `http://localhost:8080`) |
 | `--game=ID` | game to join |
 | `--colour=RED\|GREEN\|YELLOW\|BLUE\|SPECTATOR` | colour to play (not case-sensitive); `SPECTATOR` only watches |
-| `--name=TEXT` | name shown in the header and the server log |
+| `--name=TEXT` | name shown in the server log |
 | `--headless` | no window: prints the game log and status to the console. Needs `--game` and `--colour`. |
 
 Examples:
@@ -95,14 +103,48 @@ java -jar ludo-client.jar --game=1 --colour=BLUE --headless
 
 A spectator never sends ROLL, DECISION or ACK, so any number of them can watch without slowing the game down.
 
-## 4. What you see in a client window
+## 4. What you see in the game window
 
-- **Header:** "You are Player Red (Red)" (or "Spectator"); "Turn N · Round R · Version V"; whose turn it is and the last roll; a badge that is green **✔ Synced** when this client's SHA-256 of the state equals the server's, or red **✖ Out of sync** when it does not. Hover over the badge to see the hashes.
-- **Board:** the 52-cell path, X (start) cells, approach cells (coloured circles), home straights, bases and the centre home. α/β/γ mark the special cells, and the purple **?** is the mystery cell. Pieces are circles labelled R1, G2 and so on. Two or more pieces on one cell are drawn as a block with a "×N" badge. Hover over a cell for its number and name.
-- **Right column:** one panel per player: base/board/home counts, where each piece is, captures, active effects and rounds left, finishing place, and "played by server" if the server has taken over that colour.
-- **Bottom:** the game log, exactly the lines the server sent (the same as the console game). Below it, the status bar: Connected / Reconnecting..., a yellow "Paused: waiting for Blue" banner, and the final places when the game is over.
+One window, like a real Ludo app. It fits the screen (Windows display scaling included), and the board grows and shrinks with the window.
 
-All four windows show the same version number and the same log at the same time. The server waits for every client's ACK before the next roll.
+- **The board** is Figure 1 of the brief:
+  - Green, Yellow, Red and Blue bases in the four corners, each with a white diamond, a dashed inner diamond and a cross. A waiting token sits on its own arm of the cross (piece 1 top, 2 right, 3 bottom, 4 left).
+  - White path cells, each colour's **X** start cell and approach circle, the coloured home straights, and Home in the centre (four triangles labelled "Home").
+  - The LUDO-T extras are kept small: **α β γ** in the corner of the Alpha, Beta and Gamma cells, and the **mystery cell** glowing purple with a "?" and the rounds it has left.
+- **Tokens** are glossy pieces numbered 1-4. Small badges show LUDO-T state on the piece itself:
+
+  | Badge | Meaning |
+  |---|---|
+  | ↻ / ↺ (top-right) | travels clockwise / counterclockwise (coin toss, T-1) |
+  | gold dot (top-left) | has captured at least once, so it may enter its home straight (T-7) |
+  | ⚡ orange (bottom-right) | energised: double speed |
+  | ½ green (bottom-right) | sick: half speed |
+  | ❚❚ grey (bottom-right) | in a briefing: cannot move |
+  | stack with "×N" | a block of N tokens |
+
+  **Hover** over a token for its name, location, direction, captures and effect with rounds left. Hover over a cell for its number and meaning (X, approach, Alpha/Beta/Gamma, mystery).
+- **Player boxes** sit outside each corner, next to that player's base:
+  - "Red · Aggressive", a dice and the player's Home progress.
+  - The player whose turn it is **glows** and its dice shows the roll; the others are dimmed.
+  - Tags: **YOU** (your colour, in a player window), **computer** (the server took over that colour), **1st place** and so on.
+- **Animations** (game window as spectator only):
+  - the dice tumbles before showing the roll
+  - tokens walk cell by cell
+  - mystery jumps flash, and captured tokens fade back to their base
+  - a new state arriving mid-move snaps to it at once
+- **Banners** pop up over the board for about 1.5 s on a capture, a mystery teleport, an Alpha/Beta/Gamma effect, a block, a token reaching Home, and a player finishing.
+- **Toasts** appear only for problems: "Reconnecting...", "Waiting for Blue..." (the server paused for that player), "Blue is now played by the computer".
+- **Winner screen:** at the end of the game, a podium shows places 1-3, with 4th beneath, and how the game ended.
+
+### Developer view: F2
+
+Press **F2** in the game window to show or hide a panel on the right. It is off by default. It shows:
+- the connection state
+- whether this client's SHA-256 of the state equals the server's (✓ synced / ✖ out of sync, with the hash)
+- the Version, Turn and Round
+- the game log, exactly as the server sent it
+
+This client's own warnings, e.g. a refused request, are listed there marked "!". The F2 view of every client shows the same version, hash and log at the same moment.
 
 ## 5. Troubleshooting
 
@@ -112,8 +154,8 @@ All four windows show the same version number and the same log at the same time.
 | Works on the server PC but not from others | Firewall rule missing (section 3), or the network is set to *Public*. Use a private network or add the rule for all profiles. |
 | `start-demo.bat` says a server is already running | Close the old server window (or end its `java.exe`) first. |
 | `Address already in use` when starting the server | Another program uses 8080. Start with `--port=8081` and use that port in the clients. |
-| "Red has already joined this game; continuing as a reconnecting client" | That colour joined before, usually because the client was restarted. It carries on watching and playing that colour. |
-| Yellow banner "Paused: waiting for Blue" | Blue's client did not roll or decide within `--move-timeout` (default 10 s). It resumes when Blue answers or reconnects. After 30 s more, the server plays Blue for the rest of the game ("played by server"). |
-| Status bar says "Reconnecting..." | The event stream dropped. The client retries by itself (0.5 s, 1 s, 2 s, 4 s, then every 5 s) and gets the current state on reconnect. |
-| Red "Out of sync" badge | The client's hash differed from the server's. The client ACKs with its own hash, the server answers by sending the state again, and the badge should turn green on the next state. |
-| Window too big | On small or scaled screens the window shrinks to fit, and the board scales with it. Drag the divider above the log to give the board more room. |
+| "Red has already joined this game; continuing as a reconnecting client" (F2 view of a Red window, or the Red console) | That colour joined before, usually because the client was restarted. It carries on watching and playing that colour. |
+| Toast "Waiting for Blue..." | Blue's client did not roll or decide within `--move-timeout` (default 10 s). It resumes when Blue answers or reconnects. After 30 s more, the server plays Blue for the rest of the game: toast "Blue is now played by the computer" and a **computer** tag on Blue's box. |
+| Toast "Reconnecting..." | The event stream dropped. The client retries by itself (0.5 s, 1 s, 2 s, 4 s, then every 5 s) and gets the current state on reconnect ("Reconnected"). |
+| F2 view says "✖ OUT OF SYNC" | The client's hash differed from the server's. The client ACKs with its own hash, the server answers by sending the state again, and it should say "✓ synced" on the next state. |
+| Small screen | The window always fits the usable screen area, and the board and player boxes scale with it. Resize or maximise freely. |
