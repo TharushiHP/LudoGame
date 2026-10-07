@@ -59,6 +59,35 @@ class HttpServerGatewayTest {
     }
 
     @Test
+    void theObserverSeesEveryAttemptAndTheFinalAnswer() throws Exception {
+        List<String> seen = new CopyOnWriteArrayList<>();
+        RequestObserver observer = new RequestObserver() {
+            @Override
+            public void onAttempt(String method, String path, int attempt, int status, long nanos) {
+                seen.add("attempt " + attempt + " " + method + " " + path + " " + status);
+            }
+
+            @Override
+            public void onCompleted(String method, String path, int attempts, int finalStatus, long totalNanos) {
+                seen.add("done after " + attempts + ": " + finalStatus);
+            }
+        };
+        try (StubServer server = new StubServer("/games/1/roll", exchange -> {
+            record(exchange);
+            if (calls.incrementAndGet() == 1)
+                reply(exchange, 503, "{\"error\":\"busy\"}");
+            else
+                reply(exchange, 200, "{}");
+        })) {
+            HttpServerGateway gateway = new HttpServerGateway(HttpClient.newHttpClient(), server.url(), FAST, observer);
+            gateway.roll("1", new RollCommand(PlayerColor.RED, 1, 2, "req-5")).get(5, TimeUnit.SECONDS);
+
+            assertEquals(List.of("attempt 1 POST /games/1/roll 503", "attempt 2 POST /games/1/roll 200",
+                    "done after 2: 200"), seen);
+        }
+    }
+
+    @Test
     void aDroppedConnectionIsRetriedWithTheSameRequestId() throws Exception {
         try (StubServer server = new StubServer("/games/1/roll", exchange -> {
             record(exchange);

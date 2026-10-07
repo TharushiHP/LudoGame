@@ -26,7 +26,7 @@ The flags below were checked in a running server with `Thread.getAllStackTraces(
 
 | Data | Owner | How other threads see it |
 |---|---|---|
-| `Game`, coordinator state, seats, ack barrier, idempotency map | `game-<id>` only | They don't. They send commands through the queue and get replies through a `CompletableFuture`. |
+| `Game`, coordinator state, seats, ack barrier, idempotency memory (`ReplyMemory`) | `game-<id>` only | They don't. They send commands through the queue and get replies through a `CompletableFuture`. `ReplyMemory` keeps accepted replies for 30 s in a plain `LinkedHashMap` with **no lock**: only `game-<id>` reads it, stores in it and removes expired entries from it, during `CommandLoop.handle`. There is no cleaner thread. |
 | Latest STATE (`StateView`), state name, joined count | written by `game-<id>` | `volatile` fields holding immutable values; any thread may read them (GET /state, GET /games). |
 | Version | written by `game-<id>` | `AtomicLong`; any thread may read it. |
 | Event-stream list | changed by HTTP workers (connect) and `sse-writer-<id>` (failed write) | `CopyOnWriteArrayList`: safe to read from any thread. |
@@ -56,3 +56,20 @@ Checked in a running GUI client (Red, game 2 on a live server) with `Thread.getA
 | Swing components | EDT only | Other threads call `SwingGameView`, which uses `invokeLater`. `showState` returns a `CompletableFuture` that the EDT completes **after** it has applied the state, and only then does the controller ACK. |
 | Event order | `client-controller` | `event-stream` only puts events on the `LinkedBlockingQueue`. |
 | Last-Event-ID, backoff | `event-stream` only | Not shared. |
+
+# Test-client threads (ludo-testclients)
+
+The test clients follow the client's rule: **every thread they start is a daemon**, and only `main` keeps the JVM alive. `main` runs the scenarios one after another and waits for each with a deadline (`--timeout`), then calls `System.exit` with 0 (every check passed) or 1. So a server that hangs or never answers can never keep the tool running.
+
+| Thread | Created by | Daemon? | Why | How it stops |
+|---|---|---|---|---|
+| `main` | JVM | no | Parses the options, runs each scenario, waits for its results (with a deadline), prints and saves the summaries. | `System.exit` after the last scenario. |
+| `play-starter-N` (one per player, fixed pool) | `Players.start` | **yes** | `ClientSession.start` blocks for up to 10 s while the event stream opens, so all players of all games are started **at the same time** on their own threads instead of one after another. | Each ends after its JOIN; the pool is shut down at once. |
+| `burst-client-N` (one per burst client) | `BurstClient` | **yes** | Waits for the next ROLL_REQUEST on its own event stream, then launches a whole wave of requests with `sendAsync` in a tight loop. It never waits for a reply, so the wave is on its way before the first answer arrives. | Ends when all its requests are launched or the game is over; `close()` interrupts it. |
+| `create-client-N` (one per creating client) | `CreateScenario` | **yes** | Waits on a start latch so every client starts at the same moment, then launches its M `POST /games` with `sendAsync` without waiting. | Ends after launching. |
+| `event-stream`, `client-controller`, `decision-worker` (per player); `event-stream` (per burst client) | reused `ludo-client` classes | **yes** | Exactly the thick client's threads (see above): each test player is a real client without a window. | `close()` after the player's first GAME_OVER. |
+| `HttpClient-N-Worker-*`, `HttpClient-N-SelectorManager` (one set per HttpClient) | JDK | yes | Every test client has its **own** `HttpClient`, as it would on its own PC, so the clients really send in parallel. | End with the JVM. |
+
+Shared data: each `RequestLog` is written by many `HttpClient` threads at once, so it only appends to `ConcurrentLinkedQueue`s and is read after the scenario. A `RecordingView` uses atomics, a synchronized list and a `CountDownLatch`; a `BurstClient`'s latest STATE is a `volatile` field written by its `event-stream` thread.
+
+**Server side of the same test.** The server adds no threads. Requests from all clients reach the fixed pool of 16 `http-worker` threads, which put them on the game's bounded queue (`game-<id>` takes them off one at a time). `GET /games/{id}` reports the queue's high-water mark `peakQueueDepth`, written by the HTTP worker that has just queued a command (an `AtomicInteger`), and the 2xx/409/503 counters (`AtomicLong`s, written by the HTTP worker that got the reply). The open request in `GET /state` is written only by `game-<id>` (a `volatile` field holding an immutable event).

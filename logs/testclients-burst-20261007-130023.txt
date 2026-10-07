@@ -1,0 +1,47 @@
+LUDO-T test clients: burst
+Server   http://localhost:8091   started 2026-10-07 13:00:23   duration 47.4 s
+Options  clients=4 requests=300 wave-size=50 turn-delay=0 seed=1
+
+Requests: burst clients (4 HttpClients)
+type       sent attempts    2xx    409  503(1st)  retries  final503  other   min ms   avg ms   p95 ms   max ms
+ack         120      545     35     35       110      425        50      0     48.9   3684.0   6107.9   6133.9
+roll        280     1239      0    175       250      959       105      0     38.3   3543.9   6105.5   6184.4
+total       400     1784     35    210       360     1384       155      0     38.3   3585.9   6107.3   6184.4
+
+Requests: players (4 clients)
+type       sent attempts    2xx    409  503(1st)  retries  final503  other   min ms   avg ms   p95 ms   max ms
+ack        4008     4008   3955     53         0        0         0      0      0.4      1.3      2.7     12.8
+create        1        1      1      0         0        0         0      0    127.3    127.3    127.3    127.3
+decision   1071     1076   1070      0         1        5         1      0      0.4      6.4      1.6   5987.9
+join          4        4      4      0         0        0         0      0     22.4     23.0     24.1     24.1
+roll        749      749    749      0         0        0         0      0      0.3      0.8      1.5     28.0
+total      5833     5838   5779     53         1        5         1      0      0.3      2.2      2.4   5987.9
+
+Server queue (GET /games/{id})
+game   state          queueCapacity peakQueueDepth  accepted  rejected  refused  otherErrors
+1      GameOver(FINI~             4              4      5813       263     1545            0
+
+Notes
+  burst client 1 (Red): 100 requests in 2 waves
+  burst client 2 (Green): 100 requests in 2 waves
+  burst client 3 (Yellow): 100 requests in 2 waves
+  burst client 4 (Blue): 100 requests in 2 waves
+  waves fully launched before their first reply arrived: 8/8
+  75 duplicate copies gave up after all retries; never applied
+  503 on first attempt: 361, retries: 1389, still 503 after all retries: 156
+
+Checks
+PASS  burst game created (201) (game 1)
+PASS  every game reached GAME_OVER (1/1 games, statuses {FINISHED=1})
+PASS  every ACK hash matched (no client saw a different state) (0 mismatches in 4012 STATEs received)
+PASS  all 4 clients of each game and GET /state end with the same hash (1/1 games)
+FAIL  no unexpected client warnings (55, first: Red: DECISION refused: 503 game 1 is busy: command queue full (4), retry later)
+FAIL  every burst request launched (400/1200)
+PASS  every burst request answered with 200, 409 or 503 (400/400 answered, by status {200=35, 409=210, 503=155})
+PASS  a repeated requestId gets the identical stored reply (42 repeated ids reached the game more than once (97 copies; 7 ids accepted))
+PASS  at most one ROLL accepted per turnId (0 turns won by a burst ROLL, 0 turns with two)
+PASS  every stale ROLL rejected (0 stale ROLLs accepted)
+PASS  requests waited in the server's queue (peakQueueDepth > 1) (peakQueueDepth 4 of 4)
+PASS  no lost request and no server error other than 503 (0 unexpected)
+
+Result: FAIL

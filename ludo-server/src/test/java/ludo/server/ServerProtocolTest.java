@@ -1,6 +1,7 @@
 package ludo.server;
 
 import ludo.shared.PlayerColor;
+import ludo.shared.json.JsonObjects;
 import ludo.shared.json.JsonParser;
 import ludo.shared.protocol.DecisionRequest;
 import ludo.shared.protocol.RollRequest;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.net.http.HttpResponse;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -142,6 +144,28 @@ class ServerProtocolTest {
         assertEquals(200, games.statusCode());
         assertTrue(games.body().contains("AwaitingRoll"), games.body());
         assertTrue(games.body().contains("\"taken\":[\"RED\",\"GREEN\",\"YELLOW\",\"BLUE\"]"), games.body());
+    }
+
+    @Test
+    void gameSummaryShowsTheQueueStatisticsAndStateShowsTheOpenRequest() throws Exception {
+        RollRequest request = firstRollRequest();
+        FakePlayer other = otherThan(request.colour());
+        assertEquals(409, other.roll(request.turnId(), request.version(), FakePlayer.newId()).statusCode());
+
+        Map<String, Object> state = JsonParser.parseObject(fixture.get("/games/" + gameId + "/state").body());
+        Map<String, Object> open = JsonObjects.getObject(state, "openRequest");
+        assertEquals("ROLL_REQUEST", open.get("type"));
+        assertEquals(request.colour().name(), open.get("colour"));
+        assertEquals(request.turnId(), JsonObjects.getLong(open, "turnId"));
+        assertEquals(request.version(), JsonObjects.getLong(open, "version"));
+
+        Map<String, Object> summary = JsonParser.parseObject(fixture.get("/games/" + gameId).body());
+        assertEquals(64, JsonObjects.getLong(summary, "queueCapacity"));
+        assertTrue(JsonObjects.getLong(summary, "peakQueueDepth") >= 1, "the JOINs and ACKs went through the queue");
+        assertTrue(JsonObjects.getLong(summary, "accepted") >= 4, "four JOINs at least");
+        assertEquals(1, JsonObjects.getLong(summary, "rejected"), "the ROLL from the wrong colour");
+        assertEquals(0, JsonObjects.getLong(summary, "refused"));
+        assertEquals(0, JsonObjects.getLong(summary, "otherErrors"));
     }
 
     // --- helpers ---

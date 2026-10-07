@@ -1,0 +1,33 @@
+LUDO-T test clients: play
+Server   http://localhost:8090   started 2026-10-07 12:27:36   duration 22.1 s
+Options  games=4 clients-per-game=4 turn-delay=0 seed=11
+
+Requests: players (16 clients)
+type       sent attempts    2xx    409  503(1st)  retries  final503  other   min ms   avg ms   p95 ms   max ms
+ack        9572     9572   9572      0         0        0         0      0      0.3      9.7     28.9     59.1
+create        4        4      4      0         0        0         0      0    104.1    110.0    126.4    126.4
+decision   2830     2830   2830      0         0        0         0      0      0.2      8.7     28.3     59.1
+join         16       16     16      0         0        0         0      0      4.5     10.5     20.9     20.9
+roll       2389     2389   2389      0         0        0         0      0      0.3      6.5     27.3     59.2
+total     14811    14811  14811      0         0        0         0      0      0.2      9.0     28.6    126.4
+
+Server queue (GET /games/{id})
+game   state          queueCapacity peakQueueDepth  accepted  rejected  refused  otherErrors
+3      GameOver(FINI~            64              4      3524         0        0            0
+5      GameOver(FINI~            64              4      3345         0        0            0
+4      GameOver(FINI~            64              4      3478         0        0            0
+2      GameOver(FINI~            64              4      4460         0        0            0
+
+Notes
+  games [3, 5, 4, 2], 16 clients, each with its own HttpClient
+
+Checks
+PASS  all 4 games created (201) (4 created)
+PASS  every game reached GAME_OVER (4/4 games, statuses {FINISHED=4})
+PASS  every ACK hash matched (no client saw a different state) (0 mismatches in 9588 STATEs received)
+PASS  all 4 clients of each game and GET /state end with the same hash (4/4 games)
+PASS  no unexpected client warnings
+PASS  every ACK accepted (200) (9572/9572)
+PASS  no lost request and no server error (0 unexpected, 0 still 503 after all retries)
+
+Result: PASS

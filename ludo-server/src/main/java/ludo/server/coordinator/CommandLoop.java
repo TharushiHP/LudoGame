@@ -11,8 +11,6 @@ import ludo.shared.protocol.DecisionReply;
 import ludo.shared.protocol.JoinRequest;
 import ludo.shared.protocol.RollCommand;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
@@ -27,7 +25,8 @@ import java.util.function.Consumer;
  * Before a request reaches the state, two checks apply to every state alike:
  * <ul>
  *   <li>Idempotency (Idempotent Receiver): a requestId that was already accepted gets the stored
- *       reply again and is not applied a second time, so a client may safely retry.</li>
+ *       reply again and is not applied a second time, so a client may safely retry. Replies are
+ *       kept for 30 s ({@link ReplyMemory}), longer than any client retries.</li>
  *   <li>Seat checks: ROLL, DECISION and ACK must come from a colour that joined, and a colour the
  *       server has taken over may no longer ROLL or DECIDE.</li>
  * </ul>
@@ -36,7 +35,6 @@ import java.util.function.Consumer;
 final class CommandLoop {
 
     private static final long SLICE_NANOS = TimeUnit.MILLISECONDS.toNanos(200);
-    private static final int REMEMBERED_REPLIES = 1000;
 
     private final BlockingQueue<Command> queue;
     private final ServerLog log;
@@ -47,18 +45,15 @@ final class CommandLoop {
     private final Consumer<String> statePublisher;
     private CoordinatorState state;
 
-    // Oldest entry dropped first: a retry comes within seconds, not after 1000 later requests.
-    private final Map<String, Reply> acceptedReplies = new LinkedHashMap<>() {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Reply> eldest) {
-            return size() > REMEMBERED_REPLIES;
-        }
-    };
+    // Kept for 30 s, not for a number of requests: under overload a retry can arrive after
+    // thousands of other accepted requests, but always within the client's retry window.
+    private final ReplyMemory acceptedReplies;
 
     CommandLoop(BlockingQueue<Command> queue, ServerLog log, CoordinatorContext ctx, PlayerSeats seats,
                 Consumer<EventSink> onConnected, Consumer<EventSink> onLost, Consumer<String> statePublisher) {
         this.queue = queue;
         this.log = log;
+        this.acceptedReplies = new ReplyMemory(log::log);
         this.ctx = ctx;
         this.seats = seats;
         this.onConnected = onConnected;
@@ -125,15 +120,16 @@ final class CommandLoop {
         String requestId = requestIdOf(request);
         Reply reply;
         String note = "";
-        if (requestId != null && acceptedReplies.containsKey(requestId)) {
-            reply = acceptedReplies.get(requestId);
+        Reply stored = requestId == null ? null : acceptedReplies.get(requestId);
+        if (stored != null) {
+            reply = stored;
             note = " (duplicate requestId: stored reply, not applied again)";
         } else {
             reply = checkSeat(request);
             if (reply == null)
                 reply = dispatch(request);
             if (requestId != null && reply.isSuccess())
-                acceptedReplies.put(requestId, reply);
+                acceptedReplies.remember(requestId, reply);
         }
         log.log("queue=" + queue.size() + " " + describe(request) + " in " + state.name() + " -> " + reply.summary() + note);
         return reply;

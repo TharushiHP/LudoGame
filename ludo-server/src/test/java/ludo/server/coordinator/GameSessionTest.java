@@ -38,6 +38,39 @@ class GameSessionTest {
     }
 
     @Test
+    void queueHighWaterMarkAndRefusalsAreCounted() {
+        GameSession session = new GameSession("t", 1, 0, CONFIG, new ServerLog(CONFIG.out()));
+        assertEquals(0, session.peakQueueDepth());
+
+        session.submit(new RollCommand(PlayerColor.RED, 1, 1, "a"));
+        session.submit(new RollCommand(PlayerColor.RED, 1, 1, "b"));
+        Reply refused = session.request(new RollCommand(PlayerColor.RED, 1, 1, "c")); // full: answered at once
+
+        assertEquals(503, refused.status());
+        assertEquals(2, session.queueCapacity());
+        assertEquals(2, session.queueDepth());
+        assertEquals(2, session.peakQueueDepth(), "two commands waited at the same time");
+        assertEquals(1, session.refused());
+        assertEquals(0, session.accepted());
+        assertEquals(0, session.rejected());
+    }
+
+    @Test
+    void repliesAreCountedByStatus() throws Exception {
+        GameSession session = new GameSession("t", 1, 0, CONFIG, new ServerLog(CONFIG.out()));
+        session.start();
+        session.request(new JoinRequest(PlayerColor.RED, "red", true));
+        session.request(new RollCommand(PlayerColor.RED, 1, 0, "r")); // too early: 409
+        session.shutdown(TimeUnit.SECONDS.toMillis(5));
+
+        assertEquals(1, session.accepted());
+        assertEquals(1, session.rejected());
+        assertEquals(0, session.refused());
+        assertEquals(0, session.otherErrors());
+        assertTrue(session.peakQueueDepth() >= 1);
+    }
+
+    @Test
     void theGameThreadAnswersQueuedRequestsAndStopsWhenInterrupted() throws Exception {
         GameSession session = new GameSession("t", 1, 0, CONFIG, new ServerLog(CONFIG.out()));
         session.start();

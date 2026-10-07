@@ -44,6 +44,16 @@
                 <version>${project.version}</version>
             </dependency>
             <dependency>
+                <groupId>com.ludo</groupId>
+                <artifactId>ludo-client</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ludo</groupId>
+                <artifactId>ludo-server</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-core</artifactId>
                 <version>${mockito.version}</version>

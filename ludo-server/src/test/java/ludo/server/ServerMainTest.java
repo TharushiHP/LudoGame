@@ -27,6 +27,15 @@ class ServerMainTest {
     }
 
     @Test
+    void parsesTheQueueCapacity() {
+        assertEquals(64, ServerMain.parse(new String[0]).queueCapacity(), "default unchanged");
+        assertEquals(4, ServerMain.parse(new String[] {"--queue-capacity=4"}).queueCapacity());
+        assertThrows(IllegalArgumentException.class, () -> ServerMain.parse(new String[] {"--queue-capacity=0"}));
+        assertThrows(IllegalArgumentException.class, () -> ServerMain.parse(new String[] {"--queue-capacity=-1"}));
+        assertThrows(IllegalArgumentException.class, () -> ServerMain.parse(new String[] {"--queue-capacity=many"}));
+    }
+
+    @Test
     void parsesTheEndCondition() {
         assertEquals(EndCondition.ALL_PLACES, ServerMain.parse(new String[] {"--end-condition=ALL_PLACES"}).endCondition());
         assertEquals(EndCondition.FIRST_WINNER, ServerMain.parse(new String[] {"--end-condition=first_winner"}).endCondition());

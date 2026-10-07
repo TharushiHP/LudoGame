@@ -7,6 +7,7 @@ import ludo.server.coordinator.state.Reply;
 import ludo.shared.PlayerColor;
 import ludo.shared.protocol.ClientRequest;
 import ludo.shared.protocol.GameOverEvent;
+import ludo.shared.protocol.ServerEvent;
 import ludo.shared.protocol.StateEvent;
 
 import java.io.IOException;
@@ -18,6 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -32,6 +34,9 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>Results are published through volatile fields holding immutable values (the latest STATE,
  *       the coordinator state's name), so reads such as GET /state never use the queue or a lock.</li>
  *   <li>The version is an AtomicLong: only the game thread increments it, any thread may read it.</li>
+ *   <li>Queue evidence for GET /games/{id}: the queue's high-water mark (an AtomicInteger raised by
+ *       the HTTP thread that has just queued a command) and how many requests were answered 2xx,
+ *       409, 503 (queue full) or otherwise (AtomicLongs, counted by the HTTP thread that got the reply).</li>
  * </ul>
  */
 public final class GameSession {
@@ -47,6 +52,12 @@ public final class GameSession {
     private final Broadcaster broadcaster;
     private final Thread gameThread;
     private final AtomicLong version = new AtomicLong();
+    private final AtomicInteger peakQueueDepth = new AtomicInteger();
+    private final AtomicLong accepted = new AtomicLong();
+    private final AtomicLong rejected = new AtomicLong();
+    private final AtomicLong refused = new AtomicLong();
+    private final AtomicLong otherErrors = new AtomicLong();
+    private volatile ServerEvent openRequest;
 
     private volatile StateView latest;
     private volatile String stateName = "Created";
@@ -81,7 +92,12 @@ public final class GameSession {
 
     /** Called by HTTP threads: queue the request and wait for the game thread's reply. */
     public Reply request(ClientRequest request) {
-        CompletableFuture<Reply> reply = submit(request);
+        Reply reply = awaitReply(submit(request));
+        count(reply);
+        return reply;
+    }
+
+    private Reply awaitReply(CompletableFuture<Reply> reply) {
         try {
             return reply.get(config.replyTimeoutMs(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
@@ -94,6 +110,17 @@ public final class GameSession {
         }
     }
 
+    private void count(Reply reply) {
+        if (reply.isSuccess())
+            accepted.incrementAndGet();
+        else if (reply.status() == 409)
+            rejected.incrementAndGet();
+        else if (reply.status() == 503)
+            refused.incrementAndGet();
+        else
+            otherErrors.incrementAndGet();
+    }
+
     /** Puts a request on the queue; the future is already completed with 503/409 if it cannot go on. */
     CompletableFuture<Reply> submit(ClientRequest request) {
         if (closed)
@@ -104,6 +131,7 @@ public final class GameSession {
             return CompletableFuture.completedFuture(Reply.unavailable(
                     "game " + id + " is busy: command queue full (" + config.queueCapacity() + "), retry later"));
         }
+        peakQueueDepth.accumulateAndGet(queue.size(), Math::max);
         // The game thread sets closed and then drains the queue. If it closed just after our offer,
         // either it drained our command (and completed it) or we take it back here.
         if (closed && queue.remove(command))
@@ -198,6 +226,45 @@ public final class GameSession {
         return gameThread;
     }
 
+    /** The open ROLL_REQUEST or DECISION_REQUEST the game is waiting for, or null. */
+    public ServerEvent openRequest() {
+        return openRequest;
+    }
+
+    public int queueCapacity() {
+        return config.queueCapacity();
+    }
+
+    /** Commands waiting for the game thread right now. */
+    public int queueDepth() {
+        return queue.size();
+    }
+
+    /** The most commands that were ever waiting at once (high-water mark): above 1 means requests were queued. */
+    public int peakQueueDepth() {
+        return peakQueueDepth.get();
+    }
+
+    /** Requests answered 2xx. */
+    public long accepted() {
+        return accepted.get();
+    }
+
+    /** Requests answered 409 (stale, wrong turn, game over). */
+    public long rejected() {
+        return rejected.get();
+    }
+
+    /** Requests answered 503 (queue full or shutting down); the client retries them. */
+    public long refused() {
+        return refused.get();
+    }
+
+    /** Requests answered with any other error (400, 504). */
+    public long otherErrors() {
+        return otherErrors.get();
+    }
+
     // --- used by the game thread (Coordinator) ---
 
     ServerConfig config() {
@@ -214,6 +281,10 @@ public final class GameSession {
 
     void publishLatest(StateView view) {
         latest = view;
+    }
+
+    void publishOpenRequest(ServerEvent request) {
+        openRequest = request;
     }
 
     void publishStateName(String name) {

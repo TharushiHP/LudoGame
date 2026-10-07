@@ -1,0 +1,558 @@
+{
+  "info": {
+    "_postman_id": "0b5f3c2e-8d7a-4e43-9a0e-2b1d6f4c9e21",
+    "name": "LUDO-T coordinator server",
+    "description": "Requests for the LUDO-T coordinator server (Assignment 2). Use with the 'LUDO-T local' environment. Run each folder with the Collection Runner, in order: Lifecycle creates the game that Player actions plays; Error cases makes its own game. See docs/postman/README.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Lifecycle",
+      "item": [
+        {
+          "name": "Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('server is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Create game",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const game = pm.response.json();",
+                  "pm.test('has a game id', () => pm.expect(game.gameId).to.be.a('string'));",
+                  "pm.environment.set('gameId', game.gameId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"seed\": 7, \"turnDelayMs\": 0, \"endCondition\": \"FIRST_WINNER\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/games", "host": ["{{baseUrl}}"], "path": ["games"] }
+          }
+        },
+        {
+          "name": "List games",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('games is a list', () => pm.expect(pm.response.json().games).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/games", "host": ["{{baseUrl}}"], "path": ["games"] }
+          }
+        },
+        {
+          "name": "Get game (queue statistics)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const g = pm.response.json();",
+                  "pm.test('shows the queue statistics', () => {",
+                  "  ['queueCapacity', 'queueDepth', 'peakQueueDepth', 'accepted', 'rejected', 'refused', 'otherErrors']",
+                  "    .forEach(field => pm.expect(g).to.have.property(field));",
+                  "});",
+                  "console.log('queue ' + g.queueDepth + '/' + g.queueCapacity + ', peak ' + g.peakQueueDepth + ', accepted ' + g.accepted + ', rejected ' + g.rejected + ', refused ' + g.refused);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}"] }
+          }
+        },
+        {
+          "name": "Get state",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json();",
+                  "pm.test('has version and openRequest fields', () => {",
+                  "  pm.expect(s).to.have.property('version');",
+                  "  pm.expect(s).to.have.property('openRequest');",
+                  "});",
+                  "pm.environment.set('version', s.version);",
+                  "pm.environment.set('hash', s.hash);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/state", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "state"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Player actions",
+      "item": [
+        {
+          "name": "Join Red",
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('200 OK', () => pm.response.to.have.status(200));" ] } } ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"colour\": \"RED\", \"clientName\": \"Postman Red\", \"triesOtherPiecesWhenBlocked\": true}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/join", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "join"] }
+          }
+        },
+        {
+          "name": "Join Green",
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('200 OK', () => pm.response.to.have.status(200));" ] } } ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"colour\": \"GREEN\", \"clientName\": \"Postman Green\", \"triesOtherPiecesWhenBlocked\": true}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/join", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "join"] }
+          }
+        },
+        {
+          "name": "Join Yellow",
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('200 OK', () => pm.response.to.have.status(200));" ] } } ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"colour\": \"YELLOW\", \"clientName\": \"Postman Yellow\", \"triesOtherPiecesWhenBlocked\": true}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/join", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "join"] }
+          }
+        },
+        {
+          "name": "Join Blue",
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('200 OK', () => pm.response.to.have.status(200));" ] } } ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"colour\": \"BLUE\", \"clientName\": \"Postman Blue\", \"triesOtherPiecesWhenBlocked\": false}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/join", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "join"] }
+          }
+        },
+        {
+          "name": "Get state (whose turn)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json();",
+                  "const open = s.openRequest;",
+                  "pm.environment.set('version', s.version);",
+                  "pm.environment.set('hash', s.hash);",
+                  "pm.environment.set('openType', open ? open.type : '');",
+                  "if (open) {",
+                  "  pm.environment.set('colour', open.colour);",
+                  "  if (open.type === 'ROLL_REQUEST') pm.environment.set('turnId', open.turnId);",
+                  "}",
+                  "// Right after the fourth JOIN the game may not be waiting yet: ask again (Runner only, at most 20 times).",
+                  "const tries = Number(pm.environment.get('stateTries') || 0);",
+                  "if (!(open && open.type === 'ROLL_REQUEST') && tries < 20) {",
+                  "  pm.environment.set('stateTries', tries + 1);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "  pm.environment.unset('stateTries');",
+                  "  pm.test('the game waits for a ROLL', () => pm.expect(open && open.type).to.eql('ROLL_REQUEST'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/state", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "state"] }
+          }
+        },
+        {
+          "name": "Roll",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "type": "text/javascript", "exec": [ "pm.environment.set('requestId', pm.variables.replaceIn('{{$guid}}'));" ] }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK: the server rolled', () => pm.response.to.have.status(200));",
+                  "pm.test('accepted for this turn', () => pm.expect(pm.response.json().turnId).to.eql(Number(pm.environment.get('turnId'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"colour\": \"{{colour}}\", \"turnId\": {{turnId}}, \"expectedVersion\": {{version}}, \"requestId\": \"{{requestId}}\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/roll", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "roll"] }
+          }
+        },
+        {
+          "name": "Get state (after the roll)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json();",
+                  "const open = s.openRequest;",
+                  "pm.environment.set('version', s.version);",
+                  "pm.environment.set('hash', s.hash);",
+                  "pm.environment.set('openType', open ? open.type : '');",
+                  "if (open && open.type === 'DECISION_REQUEST') {",
+                  "  pm.environment.set('colour', open.colour);",
+                  "  pm.environment.set('decisionId', open.decisionId);",
+                  "  pm.environment.set('decisionKind', open.kind);",
+                  "  pm.environment.set('piece', open.candidates.length > 0 ? open.candidates[0] : '');",
+                  "}",
+                  "console.log('open request after the roll: ' + JSON.stringify(open));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/state", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "state"] }
+          }
+        },
+        {
+          "name": "Decision",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Answers the open DECISION_REQUEST: the first candidate piece, or 'yes' to a move from base.",
+                  "const body = {",
+                  "  colour: pm.environment.get('colour'),",
+                  "  decisionId: Number(pm.environment.get('decisionId')),",
+                  "  expectedVersion: Number(pm.environment.get('version')),",
+                  "  requestId: pm.variables.replaceIn('{{$guid}}')",
+                  "};",
+                  "if (pm.environment.get('decisionKind') === 'MOVE_FROM_BASE') body.fromBase = true;",
+                  "else body.piece = Number(pm.environment.get('piece'));",
+                  "pm.environment.set('decisionBody', JSON.stringify(body));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Some rolls need no decision (no piece can move): then there is nothing to answer and the server says 409.",
+                  "if (pm.environment.get('openType') === 'DECISION_REQUEST')",
+                  "  pm.test('200 OK: decision applied', () => pm.response.to.have.status(200));",
+                  "else",
+                  "  pm.test('409: no decision was open', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{{decisionBody}}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/decision", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "decision"] }
+          }
+        },
+        {
+          "name": "Get state (to acknowledge)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json();",
+                  "pm.environment.set('version', s.version);",
+                  "pm.environment.set('hash', s.hash);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/state", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "state"] }
+          }
+        },
+        {
+          "name": "Ack",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "type": "text/javascript", "exec": [ "pm.environment.set('requestId', pm.variables.replaceIn('{{$guid}}'));" ] }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 200 if the version is still the current one; 409 'stale ACK' if the game has moved on meanwhile.",
+                  "pm.test('answered 200 or 409', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));",
+                  "if (pm.response.code === 200)",
+                  "  pm.test('acked this version', () => pm.expect(pm.response.json().version).to.eql(Number(pm.environment.get('version'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"colour\": \"RED\", \"version\": {{version}}, \"hash\": \"{{hash}}\", \"requestId\": \"{{requestId}}\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/ack", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "ack"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error cases",
+      "item": [
+        {
+          "name": "Setup: create game",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('gameId', pm.response.json().gameId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"seed\": 3, \"turnDelayMs\": 0}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games", "host": ["{{baseUrl}}"], "path": ["games"] }
+          }
+        },
+        {
+          "name": "Setup: join all four",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Red, Green and Yellow join here; Blue's JOIN is this request itself (it starts the game).",
+                  "['RED', 'GREEN', 'YELLOW'].forEach(colour => pm.sendRequest({",
+                  "  url: pm.environment.get('baseUrl') + '/games/' + pm.environment.get('gameId') + '/join',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({ colour: colour, clientName: 'Postman ' + colour, triesOtherPiecesWhenBlocked: true }) }",
+                  "}, (err, res) => pm.test(colour + ' joined', () => pm.expect(res.code).to.eql(200))));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [ "pm.test('BLUE joined', () => pm.response.to.have.status(200));" ] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"colour\": \"BLUE\", \"clientName\": \"Postman Blue\", \"triesOtherPiecesWhenBlocked\": false}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/join", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "join"] }
+          }
+        },
+        {
+          "name": "Setup: get state (whose turn)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const s = pm.response.json();",
+                  "const open = s.openRequest;",
+                  "pm.environment.set('version', s.version);",
+                  "if (open && open.type === 'ROLL_REQUEST') {",
+                  "  pm.environment.set('colour', open.colour);",
+                  "  pm.environment.set('turnId', open.turnId);",
+                  "}",
+                  "const tries = Number(pm.environment.get('stateTries') || 0);",
+                  "if (!(open && open.type === 'ROLL_REQUEST') && tries < 20) {",
+                  "  pm.environment.set('stateTries', tries + 1);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "  pm.environment.unset('stateTries');",
+                  "  pm.test('the game waits for a ROLL', () => pm.expect(open && open.type).to.eql('ROLL_REQUEST'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/state", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "state"] }
+          }
+        },
+        {
+          "name": "Stale version → 409",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "type": "text/javascript", "exec": [ "pm.environment.set('staleVersion', Number(pm.environment.get('version')) - 1);" ] }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('reason: stale version', () => pm.expect(pm.response.json().error).to.include('stale version'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"colour\": \"{{colour}}\", \"turnId\": {{turnId}}, \"expectedVersion\": {{staleVersion}}, \"requestId\": \"{{$guid}}\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/roll", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "roll"] }
+          }
+        },
+        {
+          "name": "Roll with a fixed requestId → 200",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "type": "text/javascript", "exec": [ "pm.environment.set('dupRequestId', pm.variables.replaceIn('{{$guid}}'));" ] }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.environment.set('firstReply', pm.response.text());"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"colour\": \"{{colour}}\", \"turnId\": {{turnId}}, \"expectedVersion\": {{version}}, \"requestId\": \"{{dupRequestId}}\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/roll", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "roll"] }
+          }
+        },
+        {
+          "name": "Same requestId again → stored reply",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The game has moved on, so a new ROLL would get 409. The repeated requestId gets the stored 200 instead, and is not applied again.",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('identical to the first reply', () => pm.expect(pm.response.text()).to.eql(pm.environment.get('firstReply')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"colour\": \"{{colour}}\", \"turnId\": {{turnId}}, \"expectedVersion\": {{version}}, \"requestId\": \"{{dupRequestId}}\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}/roll", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}", "roll"] }
+          }
+        },
+        {
+          "name": "Unknown game → 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [ "pm.test('404 Not Found', () => pm.response.to.have.status(404));" ] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/games/999999/state", "host": ["{{baseUrl}}"], "path": ["games", "999999", "state"] }
+          }
+        },
+        {
+          "name": "Bad endCondition → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('says what is allowed', () => pm.expect(pm.response.json().error).to.include('FIRST_WINNER or ALL_PLACES'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"endCondition\": \"SOMETIMES\"}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/games", "host": ["{{baseUrl}}"], "path": ["games"] }
+          }
+        }
+      ]
+    }
+  ]
+}

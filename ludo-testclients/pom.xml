@@ -10,6 +10,48 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <!-- Scripted test clients for concurrency tests. Placeholder until that task. -->
+    <!-- Automatic test clients (runnable jar): fast clients that send asynchronous requests to a
+         coordinator server at the same time, to prove the server queues them and stays consistent.
+         They reuse the thick client's network code; the server is only needed by the tests. -->
     <artifactId>ludo-testclients</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.ludo</groupId>
+            <artifactId>ludo-client</artifactId>
+        </dependency>
+        <!-- Tests start a real server in-process; the jar itself never contains it. -->
+        <dependency>
+            <groupId>com.ludo</groupId>
+            <artifactId>ludo-server</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>ludo-testclients</finalName>
+        <plugins>
+            <!-- Packs the test clients, ludo-client, ludo-players and ludo-shared into one runnable jar (build plugin only). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>ludo.testclients.TestClientMain</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

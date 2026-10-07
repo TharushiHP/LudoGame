@@ -145,7 +145,7 @@ final class Coordinator implements CoordinatorContext {
         betweenGames = null;
         firstStateSent = false;
         connectedSincePause.clear();
-        pendingRequest = null;
+        setPendingRequest(null);
         log.log("game " + session.id() + " #" + number + " starts with seed " + seed + " (same seats; "
                 + "substituted: " + seats.substitutedColours() + ")");
         broadcaster.broadcast(new NewGameEvent(number, seed));
@@ -205,7 +205,7 @@ final class Coordinator implements CoordinatorContext {
      */
     boolean awaitPlayer(PlayerColor colour, CoordinatorState waiting, ServerEvent request,
                         BooleanSupplier answered) throws InterruptedException {
-        pendingRequest = request;
+        setPendingRequest(request);
         try {
             broadcaster.broadcast(request);
             loop.enter(waiting);
@@ -233,7 +233,7 @@ final class Coordinator implements CoordinatorContext {
                 return false;
             }
         } finally {
-            pendingRequest = null;
+            setPendingRequest(null);
         }
     }
 
@@ -315,6 +315,12 @@ final class Coordinator implements CoordinatorContext {
     }
 
     // --- helpers ---
+
+    /** The open ROLL_REQUEST or DECISION_REQUEST (or null), also published for GET /state. */
+    private void setPendingRequest(ServerEvent request) {
+        pendingRequest = request;
+        session.publishOpenRequest(request);
+    }
 
     private StateView publishState(GameSnapshot snapshot) {
         long version = session.nextVersion();

@@ -17,6 +17,7 @@ import ludo.shared.protocol.ClientRequest;
 import ludo.shared.protocol.DecisionReply;
 import ludo.shared.protocol.JoinRequest;
 import ludo.shared.protocol.RollCommand;
+import ludo.shared.protocol.ServerEvent;
 import ludo.shared.protocol.SnapshotCodec;
 
 import java.io.IOException;
@@ -35,12 +36,14 @@ import java.util.concurrent.atomic.AtomicLong;
  * POST /games                    {seed?, turnDelayMs?, endCondition?}  -> 201 {gameId, seed, turnDelayMs, endCondition}
  * GET  /games                                           -> {games: [...]}
  * GET  /games/{id}                                      -> one game's summary (incl. taken colours,
- *                                                          gameNumber and the current seed)
+ *                                                          gameNumber, the current seed and the queue
+ *                                                          statistics: queueCapacity, queueDepth,
+ *                                                          peakQueueDepth, accepted, rejected, refused, otherErrors)
  * POST /games/{id}/join          {colour, clientName, triesOtherPiecesWhenBlocked}
  * POST /games/{id}/roll          {colour, turnId, expectedVersion, requestId}
  * POST /games/{id}/decision      {colour, decisionId, expectedVersion, requestId, piece | fromBase, memo?}
  * POST /games/{id}/ack           {colour, version, hash, requestId}
- * GET  /games/{id}/state                                -> {version, hash, snapshot}
+ * GET  /games/{id}/state                                -> {version, hash, snapshot, openRequest}
  * GET  /games/{id}/events?colour=RED                    -> text/event-stream
  * </pre>
  */
@@ -202,6 +205,29 @@ final class GamesHandler implements HttpHandler {
         json.put("seed", session.seed()); // the current game's seed
         json.put("turnDelayMs", session.turnDelayMs());
         json.put("endCondition", session.endCondition().name());
+        // Queue evidence: peakQueueDepth above 1 means requests really waited in the queue.
+        json.put("queueCapacity", session.queueCapacity());
+        json.put("queueDepth", session.queueDepth());
+        json.put("peakQueueDepth", session.peakQueueDepth());
+        json.put("accepted", session.accepted());
+        json.put("rejected", session.rejected());
+        json.put("refused", session.refused());
+        json.put("otherErrors", session.otherErrors());
+        return json;
+    }
+
+    /**
+     * The open ROLL_REQUEST or DECISION_REQUEST, so a client without an event stream (Postman) can
+     * see whose turn it is. A decision's snapshot is left out: it is the state's snapshot.
+     */
+    private static Map<String, Object> openRequest(GameSession session) {
+        ServerEvent request = session.openRequest();
+        if (request == null)
+            return null;
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("type", request.type().name());
+        json.putAll(request.toJson());
+        json.remove("snapshot");
         return json;
     }
 
@@ -214,6 +240,7 @@ final class GamesHandler implements HttpHandler {
         json.put("version", view == null ? 0 : view.version());
         json.put("hash", view == null ? null : view.hash());
         json.put("snapshot", view == null ? null : SnapshotCodec.toJson(view.snapshot()));
+        json.put("openRequest", openRequest(session));
         return json;
     }
 

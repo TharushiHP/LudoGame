@@ -1,0 +1,45 @@
+LUDO-T test clients: burst
+Server   http://localhost:8090   started 2026-10-07 12:24:43   duration 172.3 s
+Options  clients=2 requests=200 wave-size=10 turn-delay=150 seed=1
+
+Requests: burst clients (2 HttpClients)
+type       sent attempts    2xx    409  503(1st)  retries  final503  other   min ms   avg ms   p95 ms   max ms
+ack         120      120    117      3         0        0         0      0      3.6     13.8     28.2     89.2
+roll        280      280     14    266         0        0         0      0      3.3     13.5     33.3     92.7
+total       400      400    131    269         0        0         0      0      3.3     13.6     29.6     92.7
+
+Requests: players (4 clients)
+type       sent attempts    2xx    409  503(1st)  retries  final503  other   min ms   avg ms   p95 ms   max ms
+ack        4008     4008   4008      0         0        0         0      0      0.4      1.6      4.4     45.3
+create        1        1      1      0         0        0         0      0    114.8    114.8    114.8    114.8
+decision   1457     1457   1457      0         0        0         0      0      0.4      1.2      2.6     51.6
+join          4        4      4      0         0        0         0      0     37.5     39.2     39.8     39.8
+roll       1001     1001    995      6         0        0         0      0      0.6      1.7      3.6     95.6
+total      6471     6471   6465      6         0        0         0      0      0.4      1.6      3.9    114.8
+
+Server queue (GET /games/{id})
+game   state          queueCapacity peakQueueDepth  accepted  rejected  refused  otherErrors
+1      GameOver(FINI~            64             16      6595       275        0            0
+
+Notes
+  spectator window opened on game 1
+  burst client 1 (Red): 200 requests in 20 waves
+  burst client 2 (Green): 200 requests in 20 waves
+  waves fully launched before their first reply arrived: 35/40
+  503 on first attempt: 0, retries: 0, still 503 after all retries: 0
+
+Checks
+PASS  burst game created (201) (game 1)
+PASS  every game reached GAME_OVER (1/1 games, statuses {FINISHED=1})
+PASS  every ACK hash matched (no client saw a different state) (0 mismatches in 4012 STATEs received)
+PASS  all 4 clients of each game and GET /state end with the same hash (1/1 games)
+PASS  no unexpected client warnings
+PASS  every burst request launched (400/400)
+PASS  every burst request answered with 200, 409 or 503 (400/400 answered, by status {200=131, 409=269})
+PASS  a repeated requestId gets the identical stored reply (80 repeated ids (200 requests, 43 of them accepted))
+PASS  at most one ROLL accepted per turnId (6 turns won by a burst ROLL, 0 turns with two)
+PASS  every stale ROLL rejected (0 stale ROLLs accepted)
+PASS  requests waited in the server's queue (peakQueueDepth > 1) (peakQueueDepth 16 of 64)
+PASS  no lost request and no server error other than 503 (0 unexpected)
+
+Result: PASS

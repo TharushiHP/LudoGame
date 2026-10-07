@@ -21,7 +21,11 @@ public final class ClientSession {
     private final EventStreamListener listener;
 
     public ClientSession(String server, String gameId, Identity me, GameView view) {
-        HttpServerGateway gateway = new HttpServerGateway(server);
+        this(new HttpServerGateway(server), gameId, me, view);
+    }
+
+    /** With a gateway built by the caller, e.g. the test clients' instrumented one. */
+    public ClientSession(HttpServerGateway gateway, String gameId, Identity me, GameView view) {
         this.controller = new ClientController(gateway, gameId, me, view, new SnapshotStrategyDecider());
         this.listener = new EventStreamListener(gateway.http(), gateway.eventsUri(gameId, me.colour()), controller);
     }

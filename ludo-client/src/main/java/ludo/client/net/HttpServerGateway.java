@@ -34,6 +34,8 @@ import java.util.concurrent.TimeUnit;
  * first attempt did reach the server, the server answers the retry from its idempotency map instead
  * of applying it twice. Every other reply, including 409, is returned at once and never retried.
  * The waits use {@code CompletableFuture.delayedExecutor}, so no thread blocks while waiting.
+ * An optional {@link RequestObserver} is told about each attempt and each final answer (the test
+ * clients count 503s and retries with it); the client itself observes nothing.
  */
 public final class HttpServerGateway implements ServerGateway {
 
@@ -42,16 +44,23 @@ public final class HttpServerGateway implements ServerGateway {
     private final HttpClient http;
     private final URI base;
     private final RetryPolicy retry;
+    private final RequestObserver observer;
 
     public HttpServerGateway(String serverUrl) {
         this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build(), serverUrl, RetryPolicy.standard());
     }
 
     public HttpServerGateway(HttpClient http, String serverUrl, RetryPolicy retry) {
+        this(http, serverUrl, retry, RequestObserver.NONE);
+    }
+
+    /** As above, and {@code observer} is told about every attempt and every final answer (test clients). */
+    public HttpServerGateway(HttpClient http, String serverUrl, RetryPolicy retry, RequestObserver observer) {
         String trimmed = serverUrl.trim();
         this.http = http;
         this.base = URI.create(trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed);
         this.retry = retry;
+        this.observer = observer;
     }
 
     /** The shared HttpClient, also used by the {@link EventStreamListener}. */
@@ -67,7 +76,7 @@ public final class HttpServerGateway implements ServerGateway {
     @Override
     public CompletableFuture<List<GameSummary>> listGames() {
         HttpRequest request = HttpRequest.newBuilder(URI.create(base + "/games")).timeout(REQUEST_TIMEOUT).GET().build();
-        return send(request, 1).thenApply(reply -> {
+        return send(request).thenApply(reply -> {
             if (!reply.isSuccess())
                 throw new CompletionException(new IOException("GET /games: " + reply.error()));
             List<GameSummary> games = new ArrayList<>();
@@ -118,24 +127,34 @@ public final class HttpServerGateway implements ServerGateway {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(JsonWriter.write(json)))
                 .build();
-        return send(request, 1);
+        return send(request);
+    }
+
+    private CompletableFuture<GatewayReply> send(HttpRequest request) {
+        return send(request, 1, System.nanoTime());
     }
 
     /** Sends {@code request}; after a network error or 503 it sends the very same request again later. */
-    private CompletableFuture<GatewayReply> send(HttpRequest request, int attempt) {
+    private CompletableFuture<GatewayReply> send(HttpRequest request, int attempt, long firstStart) {
+        long start = System.nanoTime();
+        String method = request.method();
+        String path = request.uri().getPath();
         return http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .handle((response, error) -> {
                     Throwable cause = unwrap(error);
+                    int status = cause == null ? response.statusCode() : -1;
+                    observer.onAttempt(method, path, attempt, status, System.nanoTime() - start);
                     boolean retryable = cause instanceof IOException
                             || (cause == null && response.statusCode() == 503);
                     if (!retryable || attempt >= retry.maxAttempts()) {
+                        observer.onCompleted(method, path, attempt, status, System.nanoTime() - firstStart);
                         return cause == null
                                 ? CompletableFuture.completedFuture(toReply(response))
                                 : CompletableFuture.<GatewayReply>failedFuture(cause);
                     }
                     return CompletableFuture.supplyAsync(() -> attempt + 1,
                                     CompletableFuture.delayedExecutor(retry.delayAfter(attempt), TimeUnit.MILLISECONDS))
-                            .thenCompose(next -> send(request, next));
+                            .thenCompose(next -> send(request, next, firstStart));
                 })
                 .thenCompose(reply -> reply);
     }
