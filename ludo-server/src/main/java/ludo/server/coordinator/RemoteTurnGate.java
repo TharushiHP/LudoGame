@@ -6,16 +6,6 @@ import ludo.shared.PlayerColor;
 import ludo.shared.protocol.RollRequest;
 import ludo.shared.snapshot.GameSnapshot;
 
-/**
- * The server's {@link TurnGate} (Adapter: turns Game's "before/after every roll" calls into the
- * lockstep protocol). Game calls it on the game thread, so every wait here is a wait on the
- * command queue, never a sleep:
- * <ol>
- *   <li>{@link #beforeRoll}: ROLL_REQUEST, then wait for that colour's ROLL.</li>
- *   <li>Game rolls, asks {@link RemoteMoveDecider} for decisions, and applies the move.</li>
- *   <li>{@link #afterRoll}: STATE broadcast, wait for all ACKs, then the pacing delay.</li>
- * </ol>
- */
 final class RemoteTurnGate implements TurnGate {
 
     private final Coordinator coordinator;
@@ -39,7 +29,8 @@ final class RemoteTurnGate implements TurnGate {
 
     @Override
     public void afterRoll(GameSnapshot snapshot) throws InterruptedException {
-        // RemoteMoveDecider cannot throw InterruptedException; it restores the flag instead,
+        // RemoteMoveDecider cannot throw InterruptedException; it restores the flag
+        // instead,
         // and the game stops here, at the next point that is allowed to throw it.
         if (Thread.interrupted())
             throw new InterruptedException("game thread interrupted");

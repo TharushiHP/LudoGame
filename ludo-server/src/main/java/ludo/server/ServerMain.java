@@ -4,22 +4,13 @@ import ludo.server.config.ServerConfig;
 
 import java.io.IOException;
 
-/**
- * Entry point of the coordinator server (the runnable jar's main class).
- * Options: {@code --port=8080 --turn-delay=500 --move-timeout=10000} (milliseconds) and
- * {@code --end-condition=FIRST_WINNER|ALL_PLACES} (Rule 11; default FIRST_WINNER) and
- * {@code --rematch-delay=10000} (ms before the server starts the next game by itself; 0 = off) and
- * {@code --queue-capacity=64} (commands that may wait for one game thread; more get 503, so a small
- * value shows the back-pressure in a load test).
- * A shutdown hook (Ctrl+C) stops the server cleanly; see {@link LudoServer#stop()}.
- * The console simulation is still available as {@link ConsoleSimulation}.
- */
 public final class ServerMain {
 
     static final String USAGE = "Usage: java -jar ludo-server.jar [--port=8080] [--turn-delay=500] [--move-timeout=10000]"
             + " [--end-condition=FIRST_WINNER|ALL_PLACES] [--rematch-delay=10000] [--queue-capacity=64]";
 
-    private ServerMain() {}
+    private ServerMain() {
+    }
 
     public static void main(String[] args) {
         ServerConfig config;
@@ -34,7 +25,8 @@ public final class ServerMain {
         try {
             LudoServer server = LudoServer.start(config);
             Runtime.getRuntime().addShutdownHook(new Thread(server::stop, "shutdown-hook"));
-            // main returns now; the non-daemon HTTP dispatcher and worker threads keep the JVM alive.
+            // main returns now; the non-daemon HTTP dispatcher and worker threads keep the
+            // JVM alive.
         } catch (IOException e) {
             System.err.println("Could not start the server on port " + config.port() + ": " + e.getMessage());
             System.exit(1);
@@ -62,7 +54,8 @@ public final class ServerMain {
                 case "--rematch-delay" -> config = config.withRematchDelayMs(value);
                 case "--queue-capacity" -> {
                     if (value == 0 || value > Integer.MAX_VALUE)
-                        throw new IllegalArgumentException("--queue-capacity must be between 1 and " + Integer.MAX_VALUE);
+                        throw new IllegalArgumentException(
+                                "--queue-capacity must be between 1 and " + Integer.MAX_VALUE);
                     config = config.withQueueCapacity((int) value);
                 }
                 case "--move-timeout" -> {

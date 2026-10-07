@@ -4,11 +4,7 @@ import ludo.shared.PlayerColor;
 import ludo.shared.protocol.AckCommand;
 import ludo.shared.protocol.RollCommand;
 
-/**
- * State while the game waits for one colour's ROLL. A ROLL is accepted only from that colour,
- * for this turnId and the current version; anything else gets 409 with the reason.
- * {@link #isDone()} tells the waiting game thread that the ROLL has arrived.
- */
+
 public final class AwaitingRoll implements CoordinatorState {
 
     private final PlayerColor colour;

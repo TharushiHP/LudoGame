@@ -16,22 +16,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
-/**
- * The consumer side of a game's command queue, run only by the game thread. Whenever the game has
- * to wait (for a ROLL, a DECISION, the ACKs or the pacing delay) it calls {@link #awaitUntil},
- * which takes commands off the queue and hands each request to the current {@link CoordinatorState}
- * until the wait is over. So the game thread is the only thread that ever applies a request.
- * <p>
- * Before a request reaches the state, two checks apply to every state alike:
- * <ul>
- *   <li>Idempotency (Idempotent Receiver): a requestId that was already accepted gets the stored
- *       reply again and is not applied a second time, so a client may safely retry. Replies are
- *       kept for 30 s ({@link ReplyMemory}), longer than any client retries.</li>
- *   <li>Seat checks: ROLL, DECISION and ACK must come from a colour that joined, and a colour the
- *       server has taken over may no longer ROLL or DECIDE.</li>
- * </ul>
- * Every command is logged with the queue depth, its type and the result.
- */
 final class CommandLoop {
 
     private static final long SLICE_NANOS = TimeUnit.MILLISECONDS.toNanos(200);
@@ -45,12 +29,14 @@ final class CommandLoop {
     private final Consumer<String> statePublisher;
     private CoordinatorState state;
 
-    // Kept for 30 s, not for a number of requests: under overload a retry can arrive after
-    // thousands of other accepted requests, but always within the client's retry window.
+    // Kept for 30 s, not for a number of requests: under overload a retry can
+    // arrive after
+    // thousands of other accepted requests, but always within the client's retry
+    // window.
     private final ReplyMemory acceptedReplies;
 
     CommandLoop(BlockingQueue<Command> queue, ServerLog log, CoordinatorContext ctx, PlayerSeats seats,
-                Consumer<EventSink> onConnected, Consumer<EventSink> onLost, Consumer<String> statePublisher) {
+            Consumer<EventSink> onConnected, Consumer<EventSink> onLost, Consumer<String> statePublisher) {
         this.queue = queue;
         this.log = log;
         this.acceptedReplies = new ReplyMemory(log::log);
@@ -69,9 +55,12 @@ final class CommandLoop {
     }
 
     /**
-     * Handles commands until {@code done} is true (returns true) or the deadline passes (returns
-     * false). It polls in short slices so {@code done} is re-checked regularly even when no
-     * command arrives, e.g. to notice a client that has disconnected. It never sleeps.
+     * Handles commands until {@code done} is true (returns true) or the deadline
+     * passes (returns
+     * false). It polls in short slices so {@code done} is re-checked regularly even
+     * when no
+     * command arrives, e.g. to notice a client that has disconnected. It never
+     * sleeps.
      */
     boolean awaitUntil(BooleanSupplier done, long deadlineNanos) throws InterruptedException {
         while (!done.getAsBoolean()) {
@@ -85,7 +74,9 @@ final class CommandLoop {
         return true;
     }
 
-    /** Like {@link #awaitUntil} without a deadline (waiting for players to join). */
+    /**
+     * Like {@link #awaitUntil} without a deadline (waiting for players to join).
+     */
     void awaitForever(BooleanSupplier done) throws InterruptedException {
         while (!done.getAsBoolean()) {
             Command command = queue.poll(SLICE_NANOS, TimeUnit.NANOSECONDS);
@@ -94,7 +85,10 @@ final class CommandLoop {
         }
     }
 
-    /** Answers every command still queued with {@code reply} (used once the game is over). */
+    /**
+     * Answers every command still queued with {@code reply} (used once the game is
+     * over).
+     */
     void drain(Reply reply) {
         Command command;
         while ((command = queue.poll()) != null) {
@@ -131,7 +125,8 @@ final class CommandLoop {
             if (requestId != null && reply.isSuccess())
                 acceptedReplies.remember(requestId, reply);
         }
-        log.log("queue=" + queue.size() + " " + describe(request) + " in " + state.name() + " -> " + reply.summary() + note);
+        log.log("queue=" + queue.size() + " " + describe(request) + " in " + state.name() + " -> " + reply.summary()
+                + note);
         return reply;
     }
 

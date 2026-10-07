@@ -16,18 +16,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
-/**
- * Pushes events to one game's open event streams.
- * <ul>
- *   <li>The subscriber list is a CopyOnWriteArrayList: it is read on every event and changes only
- *       when a client connects or leaves, so lock-free reads suit it.</li>
- *   <li>All socket writes run on one thread per game, {@code sse-writer-<id>} (thread confinement
- *       for the sockets). The game thread only queues a frame and carries on, so a slow or dead
- *       client can never block the game. One thread also keeps every client's events in order.</li>
- *   <li>A write that fails removes that stream and reports it through {@code onLost}.</li>
- * </ul>
- * Every frame gets the next event id, which a reconnecting client sends back as Last-Event-ID.
- */
 final class Broadcaster {
 
     private static final String KEEP_ALIVE = ": keep-alive\n\n";
@@ -40,13 +28,17 @@ final class Broadcaster {
     private boolean closed; // guarded by this
 
     Broadcaster(String gameId, ServerLog log, Consumer<EventSink> onLost) {
-        // Non-daemon: events already queued (e.g. GAME_OVER) are still written during shutdown.
+        // Non-daemon: events already queued (e.g. GAME_OVER) are still written during
+        // shutdown.
         this.writer = Executors.newSingleThreadExecutor(NamedThreadFactory.single("sse-writer-" + gameId, false));
         this.log = log;
         this.onLost = onLost;
     }
 
-    /** Adds a stream; false once the game is over (the caller then answers the client itself). */
+    /**
+     * Adds a stream; false once the game is over (the caller then answers the
+     * client itself).
+     */
     synchronized boolean add(EventSink sink) {
         if (closed)
             return false;
@@ -69,7 +61,10 @@ final class Broadcaster {
         submit(() -> sinks.stream().filter(s -> s.colour() == colour).forEach(sink -> write(sink, frame)));
     }
 
-    /** A comment line keeps idle connections open and reveals clients that have gone. */
+    /**
+     * A comment line keeps idle connections open and reveals clients that have
+     * gone.
+     */
     void keepAlive() {
         submit(() -> sinks.forEach(sink -> write(sink, KEEP_ALIVE)));
     }
@@ -83,7 +78,10 @@ final class Broadcaster {
         return sinks.size();
     }
 
-    /** Writes everything already queued, closes every stream and stops the writer thread. */
+    /**
+     * Writes everything already queued, closes every stream and stops the writer
+     * thread.
+     */
     void close() throws InterruptedException {
         synchronized (this) {
             closed = true;

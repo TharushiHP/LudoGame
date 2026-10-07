@@ -22,23 +22,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * One game on the server, as seen by other threads (Active Object). It owns the game's command
- * queue and its game thread, {@code game-<id>}, which is the only thread that ever touches the
- * Game (see {@link Coordinator}). With rematch on, the same session plays one game after another
- * (same seats and event streams); {@link #gameNumber()} and {@link #seed()} describe the current one.
- * <ul>
- *   <li>Producer-consumer: HTTP threads call {@link #request}, which wraps the request with a
- *       CompletableFuture, puts it on a bounded ArrayBlockingQueue and waits for the reply. When
- *       the queue is full the request is refused at once with 503 (back-pressure).</li>
- *   <li>Results are published through volatile fields holding immutable values (the latest STATE,
- *       the coordinator state's name), so reads such as GET /state never use the queue or a lock.</li>
- *   <li>The version is an AtomicLong: only the game thread increments it, any thread may read it.</li>
- *   <li>Queue evidence for GET /games/{id}: the queue's high-water mark (an AtomicInteger raised by
- *       the HTTP thread that has just queued a command) and how many requests were answered 2xx,
- *       409, 503 (queue full) or otherwise (AtomicLongs, counted by the HTTP thread that got the reply).</li>
- * </ul>
- */
 public final class GameSession {
 
     private final String id;
@@ -66,12 +49,16 @@ public final class GameSession {
     private volatile boolean closed;
     private volatile GameOverEvent result;
 
-    /** A game that ends as the server's config says ({@link ServerConfig#endCondition()}). */
+    /**
+     * A game that ends as the server's config says
+     * ({@link ServerConfig#endCondition()}).
+     */
     public GameSession(String id, long seed, long turnDelayMs, ServerConfig config, ServerLog log) {
         this(id, seed, turnDelayMs, config.endCondition(), config, log);
     }
 
-    public GameSession(String id, long seed, long turnDelayMs, EndCondition endCondition, ServerConfig config, ServerLog log) {
+    public GameSession(String id, long seed, long turnDelayMs, EndCondition endCondition, ServerConfig config,
+            ServerLog log) {
         this.id = id;
         this.seed = seed;
         this.turnDelayMs = turnDelayMs;
@@ -81,7 +68,8 @@ public final class GameSession {
         this.queue = new ArrayBlockingQueue<>(config.queueCapacity());
         this.broadcaster = new Broadcaster(id, log, this::streamLost);
         Coordinator coordinator = new Coordinator(this, queue, broadcaster);
-        // Non-daemon: the JVM must not exit in the middle of a game. Stopped by interrupt().
+        // Non-daemon: the JVM must not exit in the middle of a game. Stopped by
+        // interrupt().
         this.gameThread = new Thread(coordinator::run, "game-" + id);
         this.gameThread.setDaemon(false);
     }
@@ -90,7 +78,10 @@ public final class GameSession {
         gameThread.start();
     }
 
-    /** Called by HTTP threads: queue the request and wait for the game thread's reply. */
+    /**
+     * Called by HTTP threads: queue the request and wait for the game thread's
+     * reply.
+     */
     public Reply request(ClientRequest request) {
         Reply reply = awaitReply(submit(request));
         count(reply);
@@ -121,7 +112,10 @@ public final class GameSession {
             otherErrors.incrementAndGet();
     }
 
-    /** Puts a request on the queue; the future is already completed with 503/409 if it cannot go on. */
+    /**
+     * Puts a request on the queue; the future is already completed with 503/409 if
+     * it cannot go on.
+     */
     CompletableFuture<Reply> submit(ClientRequest request) {
         if (closed)
             return CompletableFuture.completedFuture(Reply.conflict("game " + id + " is over"));
@@ -132,7 +126,8 @@ public final class GameSession {
                     "game " + id + " is busy: command queue full (" + config.queueCapacity() + "), retry later"));
         }
         peakQueueDepth.accumulateAndGet(queue.size(), Math::max);
-        // The game thread sets closed and then drains the queue. If it closed just after our offer,
+        // The game thread sets closed and then drains the queue. If it closed just
+        // after our offer,
         // either it drained our command (and completed it) or we take it back here.
         if (closed && queue.remove(command))
             return CompletableFuture.completedFuture(Reply.conflict("game " + id + " is over"));
@@ -140,7 +135,8 @@ public final class GameSession {
     }
 
     /**
-     * Registers a client's event stream. If the game is already over, the final STATE and
+     * Registers a client's event stream. If the game is already over, the final
+     * STATE and
      * GAME_OVER are written straight away and the stream is closed.
      */
     public void connect(EventSink sink) {
@@ -152,7 +148,8 @@ public final class GameSession {
         try {
             StateView last = latest;
             if (last != null)
-                sink.send(Broadcaster.frame(0, new StateEvent(last.version(), last.snapshot(), last.hash(), List.of())));
+                sink.send(
+                        Broadcaster.frame(0, new StateEvent(last.version(), last.snapshot(), last.hash(), List.of())));
             if (result != null)
                 sink.send(Broadcaster.frame(0, result));
         } catch (IOException e) {
@@ -162,12 +159,18 @@ public final class GameSession {
         }
     }
 
-    /** Sends a keep-alive comment on every open stream (called by the keep-alive thread). */
+    /**
+     * Sends a keep-alive comment on every open stream (called by the keep-alive
+     * thread).
+     */
     public void keepAlive() {
         broadcaster.keepAlive();
     }
 
-    /** Interrupts the game thread (the game ends as ABORTED) and waits for it to finish. */
+    /**
+     * Interrupts the game thread (the game ends as ABORTED) and waits for it to
+     * finish.
+     */
     public void shutdown(long timeoutMs) throws InterruptedException {
         gameThread.interrupt();
         gameThread.join(timeoutMs);
@@ -186,7 +189,10 @@ public final class GameSession {
         return seed;
     }
 
-    /** 1 for the session's first game, then 2, 3, ... (the server starts each next game by itself). */
+    /**
+     * 1 for the session's first game, then 2, 3, ... (the server starts each next
+     * game by itself).
+     */
     public int gameNumber() {
         return gameNumber;
     }
@@ -195,7 +201,10 @@ public final class GameSession {
         return turnDelayMs;
     }
 
-    /** When this game ends (Rule 11): at the first winner or when every place is decided. */
+    /**
+     * When this game ends (Rule 11): at the first winner or when every place is
+     * decided.
+     */
     public EndCondition endCondition() {
         return endCondition;
     }
@@ -217,7 +226,10 @@ public final class GameSession {
         return joined;
     }
 
-    /** Colours that have joined: an immutable set, replaced by the game thread on every JOIN. */
+    /**
+     * Colours that have joined: an immutable set, replaced by the game thread on
+     * every JOIN.
+     */
     public Set<PlayerColor> taken() {
         return taken;
     }
@@ -226,7 +238,9 @@ public final class GameSession {
         return gameThread;
     }
 
-    /** The open ROLL_REQUEST or DECISION_REQUEST the game is waiting for, or null. */
+    /**
+     * The open ROLL_REQUEST or DECISION_REQUEST the game is waiting for, or null.
+     */
     public ServerEvent openRequest() {
         return openRequest;
     }
@@ -240,7 +254,10 @@ public final class GameSession {
         return queue.size();
     }
 
-    /** The most commands that were ever waiting at once (high-water mark): above 1 means requests were queued. */
+    /**
+     * The most commands that were ever waiting at once (high-water mark): above 1
+     * means requests were queued.
+     */
     public int peakQueueDepth() {
         return peakQueueDepth.get();
     }
@@ -255,7 +272,9 @@ public final class GameSession {
         return rejected.get();
     }
 
-    /** Requests answered 503 (queue full or shutting down); the client retries them. */
+    /**
+     * Requests answered 503 (queue full or shutting down); the client retries them.
+     */
     public long refused() {
         return refused.get();
     }

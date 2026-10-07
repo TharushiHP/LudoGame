@@ -12,15 +12,6 @@ import ludo.shared.snapshot.GameSnapshot;
 
 import java.util.List;
 
-/**
- * The server's {@link MoveDecider} (Adapter / Remote Proxy): each decision Game asks for becomes a
- * DECISION_REQUEST to that colour's client, and the game thread waits on the command queue for the
- * matching DECISION. The client's memo (Blue's cycle position) comes back in the PieceChoice.
- * <p>
- * The local {@link SnapshotStrategyDecider} answers instead when the colour has been substituted,
- * or when the game thread is interrupted (shutdown): MoveDecider methods cannot throw
- * InterruptedException, so the flag is restored and the game stops at the next {@code afterRoll}.
- */
 final class RemoteMoveDecider implements MoveDecider {
 
     private final Coordinator coordinator;
@@ -31,7 +22,8 @@ final class RemoteMoveDecider implements MoveDecider {
     }
 
     @Override
-    public PieceChoice choosePiece(GameSnapshot snapshot, PlayerColor color, int roll, List<Integer> candidatePieceIds) {
+    public PieceChoice choosePiece(GameSnapshot snapshot, PlayerColor color, int roll,
+            List<Integer> candidatePieceIds) {
         if (coordinator.isSubstituted(color))
             return local.choosePiece(snapshot, color, roll, candidatePieceIds);
         DecisionReply answer = ask(new DecisionRequest(color, coordinator.nextDecisionId(), DecisionKind.CHOOSE_PIECE,

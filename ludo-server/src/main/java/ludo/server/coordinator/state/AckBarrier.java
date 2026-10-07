@@ -8,12 +8,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
-/**
- * The ack barrier for one STATE: the colours that still owe an ACK for {@code version} with a
- * matching hash. The next turn may start only when it is empty. It is used by the game thread
- * alone (thread confinement), so a plain EnumSet is enough: ACKs reach it through the command
- * queue, never directly from HTTP threads. That is why no Phaser or lock is needed.
- */
 public final class AckBarrier {
 
     static final int MAX_RESENDS = 3;
@@ -45,13 +39,16 @@ public final class AckBarrier {
         pending.remove(colour);
     }
 
-    /** Counts a re-sent STATE; true while that colour may still be sent it again. */
+    /**
+     * Counts a re-sent STATE; true while that colour may still be sent it again.
+     */
     boolean mayResend(PlayerColor colour) {
         return resends.merge(colour, 1, Integer::sum) <= MAX_RESENDS;
     }
 
     /**
-     * Removes colours that are no longer connected (they rejoin on reconnect, with a fresh STATE)
+     * Removes colours that are no longer connected (they rejoin on reconnect, with
+     * a fresh STATE)
      * and returns the removed ones so the caller can log them.
      */
     public Set<PlayerColor> dropDisconnected(Predicate<PlayerColor> connected) {

@@ -35,20 +35,6 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
-/**
- * Everything that runs on one game's thread (thread confinement): the Game itself, the coordinator
- * state, the seats, the ack barrier and the waits between turns. No other thread holds a reference
- * to any of it, so none of it needs a lock. Other threads reach it only through the command queue
- * (requests in) and through {@link GameSession}'s volatile fields and the {@link Broadcaster}
- * (results out).
- * <p>
- * Lifecycle: WaitingForPlayers until all four colours have joined; then {@code Game.run()}, which
- * calls back into {@link RemoteTurnGate} and {@link RemoteMoveDecider} for every roll and decision;
- * then a final STATE and GAME_OVER, and GameOver. With rematch on ({@code --rematch-delay}), the
- * GAME_OVER announces the next game; after the delay the same thread broadcasts NEW_GAME and plays
- * a new Game with a new seed, keeping the seats (and substitutions), the event streams, the version,
- * the turn and decision ids, so a request from the previous game is always stale (409).
- */
 final class Coordinator implements CoordinatorContext {
 
     private final GameSession session;
@@ -64,7 +50,10 @@ final class Coordinator implements CoordinatorContext {
     private long turnId;
     private long decisionId;
     private ServerEvent pendingRequest;
-    /** Between two games (rematch on): the GAME_OVER that announced the next game, and when it starts. */
+    /**
+     * Between two games (rematch on): the GAME_OVER that announced the next game,
+     * and when it starts.
+     */
     private GameOverEvent betweenGames;
     private long nextGameAt;
     private final Random seeds = new Random();
@@ -75,14 +64,10 @@ final class Coordinator implements CoordinatorContext {
         this.log = session.log();
         this.broadcaster = broadcaster;
         this.gameLog = new BufferingEventListener(config.echoGameLog(), log);
-        this.loop = new CommandLoop(queue, log, this, seats, this::onConnected, this::onLost, session::publishStateName);
+        this.loop = new CommandLoop(queue, log, this, seats, this::onConnected, this::onLost,
+                session::publishStateName);
     }
 
-    /**
-     * The game thread's whole life: wait for four players, then play. With rematch on, every game
-     * that ends normally is followed, after the rematch delay, by the next one on this same thread,
-     * with the same seats and event streams; the version keeps counting up across games.
-     */
     void run() {
         GameStatus status = GameStatus.ABORTED;
         try {
@@ -95,7 +80,7 @@ final class Coordinator implements CoordinatorContext {
                     break;
                 announceGameOver(status);
                 status = GameStatus.ABORTED; // a shutdown during the wait ends the session as ABORTED
-                game = null;                 // ...without sending the old game's final state again
+                game = null; // ...without sending the old game's final state again
                 loop.awaitUntil(() -> false, nextGameAt);
                 startNextGame();
             }
@@ -123,8 +108,10 @@ final class Coordinator implements CoordinatorContext {
     }
 
     /**
-     * Rematch on: the final STATE (no ACK needed), then GAME_OVER announcing the next game. The
-     * event streams stay open; the coordinator waits in GameOver, which answers every request with 409.
+     * Rematch on: the final STATE (no ACK needed), then GAME_OVER announcing the
+     * next game. The
+     * event streams stay open; the coordinator waits in GameOver, which answers
+     * every request with 409.
      */
     private void announceGameOver(GameStatus status) {
         GameSnapshot last = game.snapshot();
@@ -137,7 +124,10 @@ final class Coordinator implements CoordinatorContext {
                 + "; the next game starts in " + config.rematchDelayMs() + " ms");
     }
 
-    /** A new seed and game number, NEW_GAME to everyone, and a clean slate for the per-game fields. */
+    /**
+     * A new seed and game number, NEW_GAME to everyone, and a clean slate for the
+     * per-game fields.
+     */
     private void startNextGame() {
         int number = session.gameNumber() + 1;
         long seed = seeds.nextLong();
@@ -153,7 +143,10 @@ final class Coordinator implements CoordinatorContext {
 
     // --- operations used by RemoteTurnGate and RemoteMoveDecider ---
 
-    /** Before the first roll: one STATE with the introduction and roll-off, so every client starts in step. */
+    /**
+     * Before the first roll: one STATE with the introduction and roll-off, so every
+     * client starts in step.
+     */
     void ensureFirstState() throws InterruptedException {
         if (!firstStateSent) {
             firstStateSent = true;
@@ -162,10 +155,14 @@ final class Coordinator implements CoordinatorContext {
     }
 
     /**
-     * Lockstep step 1: version + 1, broadcast the full STATE with its hash and the new log lines.
-     * Step 2: wait until every connected client has ACKed this version with the same hash.
-     * Clients that disconnect leave the barrier (they get the STATE again when they reconnect);
-     * clients still missing after the move timeout are logged and the game goes on without them.
+     * Lockstep step 1: version + 1, broadcast the full STATE with its hash and the
+     * new log lines.
+     * Step 2: wait until every connected client has ACKed this version with the
+     * same hash.
+     * Clients that disconnect leave the barrier (they get the STATE again when they
+     * reconnect);
+     * clients still missing after the move timeout are logged and the game goes on
+     * without them.
      */
     void publishStateAndAwaitAcks(GameSnapshot snapshot) throws InterruptedException {
         StateView view = publishState(snapshot);
@@ -186,7 +183,10 @@ final class Coordinator implements CoordinatorContext {
                     + config.moveTimeoutMs() + " ms; continuing without them");
     }
 
-    /** Step 3: the turn delay. Requests are still answered meanwhile; the thread never sleeps. */
+    /**
+     * Step 3: the turn delay. Requests are still answered meanwhile; the thread
+     * never sleeps.
+     */
     void pace() throws InterruptedException {
         long delay = session.turnDelayMs();
         if (delay <= 0)
@@ -195,16 +195,8 @@ final class Coordinator implements CoordinatorContext {
         loop.awaitUntil(() -> false, deadline(delay));
     }
 
-    /**
-     * Broadcasts {@code request} (ROLL_REQUEST or DECISION_REQUEST) and waits for {@code colour}'s
-     * answer. If none comes within the move timeout the game is Paused (PAUSED broadcast). It
-     * resumes (RESUMED) when the answer arrives or that client reconnects; if neither happens within
-     * substituteAfter, the server plays that colour from now on.
-     *
-     * @return true if the client answered, false if the colour has just been substituted
-     */
     boolean awaitPlayer(PlayerColor colour, CoordinatorState waiting, ServerEvent request,
-                        BooleanSupplier answered) throws InterruptedException {
+            BooleanSupplier answered) throws InterruptedException {
         setPendingRequest(request);
         try {
             broadcaster.broadcast(request);
@@ -294,7 +286,10 @@ final class Coordinator implements CoordinatorContext {
 
     // --- event-stream connections (commands from the HTTP side) ---
 
-    /** A (re)connected client is brought up to date at once: the current STATE and any open request. */
+    /**
+     * A (re)connected client is brought up to date at once: the current STATE and
+     * any open request.
+     */
     private void onConnected(EventSink sink) {
         log.log("event stream " + sink.name() + " connected; " + broadcaster.size() + " open");
         if (sink.colour() != null)
@@ -316,7 +311,10 @@ final class Coordinator implements CoordinatorContext {
 
     // --- helpers ---
 
-    /** The open ROLL_REQUEST or DECISION_REQUEST (or null), also published for GET /state. */
+    /**
+     * The open ROLL_REQUEST or DECISION_REQUEST (or null), also published for GET
+     * /state.
+     */
     private void setPendingRequest(ServerEvent request) {
         pendingRequest = request;
         session.publishOpenRequest(request);

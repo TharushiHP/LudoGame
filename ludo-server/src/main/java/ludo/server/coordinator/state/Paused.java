@@ -6,11 +6,6 @@ import ludo.shared.protocol.DecisionReply;
 import ludo.shared.protocol.JoinRequest;
 import ludo.shared.protocol.RollCommand;
 
-/**
- * State while the game is paused because {@code missing} did not answer in time. It wraps the
- * state that was waiting (AwaitingRoll or AwaitingDecision) and passes every request on to it, so
- * the missing ROLL or DECISION is still accepted and the game resumes as soon as it arrives.
- */
 public final class Paused implements CoordinatorState {
 
     private final PlayerColor missing;

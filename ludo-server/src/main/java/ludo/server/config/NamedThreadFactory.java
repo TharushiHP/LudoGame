@@ -3,11 +3,6 @@ package ludo.server.config;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Creates threads with a readable name and an explicit daemon flag, so the server log and a
- * thread dump show exactly which pool did what (see docs/THREADS.md for every thread and why it
- * is daemon or not).
- */
 public final class NamedThreadFactory implements ThreadFactory {
 
     private final String prefix;

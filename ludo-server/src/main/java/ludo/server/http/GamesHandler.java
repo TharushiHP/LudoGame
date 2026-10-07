@@ -28,25 +28,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Handles every path under /games. It runs on the HTTP worker threads and never touches a Game:
- * it parses the request, then either reads an immutable published value (GET /state, GET /games)
- * or hands the request to the game's queue and returns the game thread's reply.
- * <pre>
- * POST /games                    {seed?, turnDelayMs?, endCondition?}  -> 201 {gameId, seed, turnDelayMs, endCondition}
- * GET  /games                                           -> {games: [...]}
- * GET  /games/{id}                                      -> one game's summary (incl. taken colours,
- *                                                          gameNumber, the current seed and the queue
- *                                                          statistics: queueCapacity, queueDepth,
- *                                                          peakQueueDepth, accepted, rejected, refused, otherErrors)
- * POST /games/{id}/join          {colour, clientName, triesOtherPiecesWhenBlocked}
- * POST /games/{id}/roll          {colour, turnId, expectedVersion, requestId}
- * POST /games/{id}/decision      {colour, decisionId, expectedVersion, requestId, piece | fromBase, memo?}
- * POST /games/{id}/ack           {colour, version, hash, requestId}
- * GET  /games/{id}/state                                -> {version, hash, snapshot, openRequest}
- * GET  /games/{id}/events?colour=RED                    -> text/event-stream
- * </pre>
- */
 final class GamesHandler implements HttpHandler {
 
     private final SessionRegistry registry;
@@ -113,7 +94,8 @@ final class GamesHandler implements HttpHandler {
                 ClientRequest request = parseRequest(action, HttpReplies.readJson(exchange));
                 HttpReplies.send(exchange, session.request(request));
             }
-            default -> HttpReplies.send(exchange, Reply.notFound("no such path: " + exchange.getRequestURI().getPath()));
+            default ->
+                HttpReplies.send(exchange, Reply.notFound("no such path: " + exchange.getRequestURI().getPath()));
         }
     }
 
@@ -153,10 +135,6 @@ final class GamesHandler implements HttpHandler {
         };
     }
 
-    /**
-     * Server-Sent Events: send the headers, register the stream with the game and return. The
-     * worker thread is free again at once; the game's writer thread writes the events from now on.
-     */
     private void openEventStream(HttpExchange exchange, GameSession session) throws IOException {
         PlayerColor colour = colourParameter(exchange);
         exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
@@ -166,7 +144,8 @@ final class GamesHandler implements HttpHandler {
                 "events#" + streamCount.incrementAndGet() + "(" + (colour == null ? "spectator" : colour) + ")");
         String lastEventId = exchange.getRequestHeaders().getFirst("Last-Event-ID");
         log.log("game " + session.id() + ": " + sink.name() + " opened"
-                + (lastEventId == null ? "" : ", reconnecting after event " + lastEventId + " (current STATE follows)"));
+                + (lastEventId == null ? ""
+                        : ", reconnecting after event " + lastEventId + " (current STATE follows)"));
         sink.send("retry: 2000\n\n");
         session.connect(sink);
     }
@@ -205,7 +184,8 @@ final class GamesHandler implements HttpHandler {
         json.put("seed", session.seed()); // the current game's seed
         json.put("turnDelayMs", session.turnDelayMs());
         json.put("endCondition", session.endCondition().name());
-        // Queue evidence: peakQueueDepth above 1 means requests really waited in the queue.
+        // Queue evidence: peakQueueDepth above 1 means requests really waited in the
+        // queue.
         json.put("queueCapacity", session.queueCapacity());
         json.put("queueDepth", session.queueDepth());
         json.put("peakQueueDepth", session.peakQueueDepth());
@@ -216,10 +196,6 @@ final class GamesHandler implements HttpHandler {
         return json;
     }
 
-    /**
-     * The open ROLL_REQUEST or DECISION_REQUEST, so a client without an event stream (Postman) can
-     * see whose turn it is. A decision's snapshot is left out: it is the state's snapshot.
-     */
     private static Map<String, Object> openRequest(GameSession session) {
         ServerEvent request = session.openRequest();
         if (request == null)
@@ -231,7 +207,6 @@ final class GamesHandler implements HttpHandler {
         return json;
     }
 
-    /** Read from the volatile published StateView: no queue, no lock, never blocks the game. */
     private static Map<String, Object> state(GameSession session) {
         StateView view = session.latestState();
         Map<String, Object> json = new LinkedHashMap<>();
@@ -265,6 +240,7 @@ final class GamesHandler implements HttpHandler {
 
     private static void methodNotAllowed(HttpExchange exchange, String allowed) throws IOException {
         exchange.getResponseHeaders().set("Allow", allowed);
-        HttpReplies.send(exchange, 405, Map.of("error", exchange.getRequestMethod() + " not allowed here; use " + allowed));
+        HttpReplies.send(exchange, 405,
+                Map.of("error", exchange.getRequestMethod() + " not allowed here; use " + allowed));
     }
 }

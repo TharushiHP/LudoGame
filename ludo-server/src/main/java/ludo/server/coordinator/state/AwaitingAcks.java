@@ -2,12 +2,6 @@ package ludo.server.coordinator.state;
 
 import ludo.shared.protocol.AckCommand;
 
-/**
- * State after a STATE broadcast: waits until every connected client has acknowledged this version
- * with the same state hash the server computed. A wrong hash means that client's state differs;
- * it is sent the STATE again (at most {@link AckBarrier#MAX_RESENDS} times, then it is dropped from
- * this barrier so one broken client cannot stop the game).
- */
 public final class AwaitingAcks implements CoordinatorState {
 
     private final AckBarrier barrier;
@@ -24,7 +18,8 @@ public final class AwaitingAcks implements CoordinatorState {
     @Override
     public Reply onAck(AckCommand request, CoordinatorContext ctx) {
         if (request.version() != barrier.version())
-            return Reply.conflict("stale ACK: version " + request.version() + ", waiting for version " + barrier.version());
+            return Reply
+                    .conflict("stale ACK: version " + request.version() + ", waiting for version " + barrier.version());
         if (!request.hash().equals(barrier.hash())) {
             if (barrier.mayResend(request.colour())) {
                 ctx.resendStateTo(request.colour());
