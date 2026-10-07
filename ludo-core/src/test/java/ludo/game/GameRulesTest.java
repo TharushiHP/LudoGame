@@ -1,8 +1,6 @@
 package ludo.game;
 
 import ludo.players.SnapshotStrategyDecider;
-import ludo.shared.BoardConstants;
-import ludo.shared.PlayerColor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,10 +27,9 @@ class GameRulesTest {
 
     private static final Pattern PLAYER_WIN = Pattern.compile("^(Red|Green|Yellow|Blue) player wins!!!$");
     private static final Pattern PLAYER_ROLL = Pattern.compile("^(Red|Green|Yellow|Blue) player rolled \\d+\\.$");
-    private static final Pattern MYSTERY_SPAWN =
-            Pattern.compile("^A mystery cell has spawned in location (\\d+)");
-    private static final Pattern MYSTERY_STATUS =
-            Pattern.compile("^The mystery cell is at (\\d+) and will be at that location for the next (\\d+) ");
+    private static final Pattern MYSTERY_SPAWN = Pattern.compile("^A mystery cell has spawned in location (\\d+)");
+    private static final Pattern MYSTERY_STATUS = Pattern
+            .compile("^The mystery cell is at (\\d+) and will be at that location for the next (\\d+) ");
 
     private PrintStream originalOut;
 
@@ -49,7 +46,8 @@ class GameRulesTest {
     }
 
     // Rule 11: the game ends as soon as only one player still has pieces out.
-    // Games that hit the safety cap (see roundCapPrintsWarning...) are skipped here.
+    // Games that hit the safety cap (see roundCapPrintsWarning...) are skipped
+    // here.
     @Test
     void gameEndsAsSoonAsOnlyOnePlayerIsLeft_andRanksAllFourPlayers() {
         int gamesChecked = 0;
@@ -66,13 +64,14 @@ class GameRulesTest {
             int thirdWin = indexOfNthMatch(messages, PLAYER_WIN, 3);
             assertTrue(thirdWin >= 0, "seed " + seed + ": fewer than three players finished");
             assertTrue(messages.subList(thirdWin + 1, messages.size()).stream()
-                            .noneMatch(m -> PLAYER_ROLL.matcher(m).matches()),
+                    .noneMatch(m -> PLAYER_ROLL.matcher(m).matches()),
                     "seed " + seed + ": dice were still rolled after the third player finished");
         }
         assertTrue(gamesChecked >= SEEDS / 2, "only " + gamesChecked + " games finished normally");
     }
 
-    // Every game must end normally or by stalemate; the round cap is only a safety net.
+    // Every game must end normally or by stalemate; the round cap is only a safety
+    // net.
     @Test
     void noGameReachesTheSafetyCap() {
         for (long seed = 1; seed <= SEEDS; seed++) {
@@ -84,7 +83,8 @@ class GameRulesTest {
     // A tiny cap forces the safety net to trigger.
     @Test
     void roundCapPrintsWarningAndLeavesUnfinishedPlayersUnranked() {
-        Game game = new GameBuilder().withMoveDecider(new SnapshotStrategyDecider()).withSeed(1).withMaxRounds(5).build();
+        Game game = new GameBuilder().withMoveDecider(new SnapshotStrategyDecider()).withSeed(1).withMaxRounds(5)
+                .build();
         RecordingListener recorded = listen(game);
         game.run();
 
@@ -96,7 +96,8 @@ class GameRulesTest {
     // Stalemate rule: a tiny threshold forces it to trigger early in a real game.
     @Test
     void stalemateEndsTheGameAndRanksEveryRemainingPlayer() {
-        Game game = new GameBuilder().withMoveDecider(new SnapshotStrategyDecider()).withSeed(1).withStalemateRounds(3).build();
+        Game game = new GameBuilder().withMoveDecider(new SnapshotStrategyDecider()).withSeed(1).withStalemateRounds(3)
+                .build();
         RecordingListener recorded = listen(game);
         game.run();
 
@@ -114,7 +115,8 @@ class GameRulesTest {
         sendHome(game, ludo.shared.PlayerColor.RED, 2);
         sendHome(game, ludo.shared.PlayerColor.YELLOW, 2);
         sendHome(game, ludo.shared.PlayerColor.GREEN, 1);
-        // Red's third piece is on its home straight, Yellow's pieces are all still at base
+        // Red's third piece is on its home straight, Yellow's pieces are all still at
+        // base
         game.playerOf(ludo.shared.PlayerColor.RED).getPieces().get(2).moveToHomePath(3);
 
         game.declareStalemate();
@@ -133,13 +135,13 @@ class GameRulesTest {
         Set<GameEvent> types = EnumSet.copyOf(recorded.events);
 
         assertTrue(types.containsAll(EnumSet.of(
-                        GameEvent.GAME_START,
-                        GameEvent.FIRST_PLAYER_CHOSEN,
-                        GameEvent.DICE_ROLLED,
-                        GameEvent.PIECE_MOVED_TO_START,
-                        GameEvent.PIECE_MOVED,
-                        GameEvent.ROUND_STATUS,
-                        GameEvent.PLAYER_WINS)),
+                GameEvent.GAME_START,
+                GameEvent.FIRST_PLAYER_CHOSEN,
+                GameEvent.DICE_ROLLED,
+                GameEvent.PIECE_MOVED_TO_START,
+                GameEvent.PIECE_MOVED,
+                GameEvent.ROUND_STATUS,
+                GameEvent.PLAYER_WINS)),
                 "event types seen: " + types);
 
         for (int i = 0; i < recorded.events.size(); i++) {
@@ -166,7 +168,8 @@ class GameRulesTest {
         assertTrue(piecesLeavingBase > 0);
     }
 
-    // The mystery cell status line must count down the rounds really left at that location.
+    // The mystery cell status line must count down the rounds really left at that
+    // location.
     @Test
     void mysteryCellStatusCountsDownRealRoundsRemaining() {
         for (long seed = 1; seed <= SEEDS; seed++) {
@@ -231,7 +234,8 @@ class GameRulesTest {
 
     private RecordingListener play(long seed) {
         Random random = new Random(seed);
-        Game game = new GameBuilder().withMoveDecider(new SnapshotStrategyDecider()).withRandomSource(random::nextInt).build();
+        Game game = new GameBuilder().withMoveDecider(new SnapshotStrategyDecider()).withRandomSource(random::nextInt)
+                .build();
         RecordingListener listener = new RecordingListener();
         game.addObserver(listener);
         game.run();

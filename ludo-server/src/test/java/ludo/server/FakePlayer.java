@@ -22,7 +22,6 @@ import ludo.shared.snapshot.GameStatus;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -36,10 +35,14 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 /**
- * A scripted client for one colour, speaking the real protocol over HTTP: it reads the event
- * stream on its own thread and, depending on its mode, answers ROLL_REQUEST and DECISION_REQUEST
- * with the same snapshot strategies the console game uses, and ACKs every STATE with the hash it
- * computes itself from the snapshot it received. Everything it sees and every reply it gets is
+ * A scripted client for one colour, speaking the real protocol over HTTP: it
+ * reads the event
+ * stream on its own thread and, depending on its mode, answers ROLL_REQUEST and
+ * DECISION_REQUEST
+ * with the same snapshot strategies the console game uses, and ACKs every STATE
+ * with the hash it
+ * computes itself from the snapshot it received. Everything it sees and every
+ * reply it gets is
  * recorded for the test to check.
  */
 final class FakePlayer {
@@ -102,7 +105,10 @@ final class FakePlayer {
             s.close();
     }
 
-    /** Waits for the next event of this type (others are skipped) that matches the filter. */
+    /**
+     * Waits for the next event of this type (others are skipped) that matches the
+     * filter.
+     */
     <T extends ServerEvent> T next(Class<T> type, Predicate<T> filter) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         while (true) {
@@ -135,7 +141,8 @@ final class FakePlayer {
     // --- protocol actions, also used directly by tests ---
 
     HttpResponse<String> roll(long turnId, long expectedVersion, String requestId) throws Exception {
-        return fixture.post("/games/" + gameId + "/roll", new RollCommand(colour, turnId, expectedVersion, requestId).toJson());
+        return fixture.post("/games/" + gameId + "/roll",
+                new RollCommand(colour, turnId, expectedVersion, requestId).toJson());
     }
 
     HttpResponse<String> decide(DecisionRequest question, long expectedVersion, String requestId) throws Exception {
@@ -144,7 +151,8 @@ final class FakePlayer {
             reply = DecisionReply.moveFromBase(colour, question.decisionId(), expectedVersion, requestId,
                     strategy.prefersMoveFromBase(question.snapshot(), colour));
         } else {
-            PieceChoice choice = strategy.choosePiece(question.snapshot(), colour, question.roll(), question.candidates());
+            PieceChoice choice = strategy.choosePiece(question.snapshot(), colour, question.roll(),
+                    question.candidates());
             reply = DecisionReply.choosePiece(colour, question.decisionId(), expectedVersion, requestId,
                     choice.piece(), choice.memo());
         }

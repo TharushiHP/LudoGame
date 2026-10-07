@@ -2,10 +2,6 @@ package ludo.client.control;
 
 import ludo.shared.PlayerColor;
 
-/**
- * Who this client is: the colour it plays and the name it shows, or a spectator that only
- * watches (Value Object; {@code colour} is null for a spectator).
- */
 public record Identity(PlayerColor colour, String name) {
 
     public static Identity player(PlayerColor colour, String name) {

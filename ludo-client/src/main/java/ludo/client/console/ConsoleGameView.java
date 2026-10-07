@@ -13,11 +13,6 @@ import ludo.shared.protocol.StateEvent;
 import java.io.PrintStream;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * The headless {@link GameView} (--headless): prints the game log exactly as the server sends it,
- * plus client status lines prefixed with "[client RED]". A STATE counts as shown as soon as it is
- * printed. Synchronised, because the controller, the listener and the decision worker may all print.
- */
 public final class ConsoleGameView implements GameView {
 
     private final PrintStream out;
@@ -48,13 +43,15 @@ public final class ConsoleGameView implements GameView {
 
     @Override
     public synchronized void showResumed(ResumedEvent resumed) {
-        out.println(prefix + "Resumed" + (resumed.substituted() ? ": the server now plays " + resumed.colour().display() : ""));
+        out.println(prefix + "Resumed"
+                + (resumed.substituted() ? ": the server now plays " + resumed.colour().display() : ""));
     }
 
     @Override
     public synchronized void showGameOver(GameOverEvent gameOver) {
         out.println(prefix + "Game over (" + gameOver.status() + "): " + gameOver.finishPositions()
-                + (gameOver.hasNextGame() ? "; next game in " + Math.round(gameOver.nextGameInMs() / 1000.0) + " s" : ""));
+                + (gameOver.hasNextGame() ? "; next game in " + Math.round(gameOver.nextGameInMs() / 1000.0) + " s"
+                        : ""));
     }
 
     @Override

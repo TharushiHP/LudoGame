@@ -34,28 +34,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-/**
- * The client's brain. It receives the server's events and decides what to send back; it never
- * applies a game rule itself, it only shows the server's snapshots and answers questions about them.
- * <p>
- * Threads: the listener only puts events on a queue ({@link #onEvent}). One thread,
- * {@code client-controller}, takes them off strictly in arrival order (thread confinement, so no
- * locks). Strategy decisions run on a separate {@code decision-worker} thread, so neither the
- * controller nor the Swing Event Dispatch Thread ever runs a strategy.
- * <ul>
- *   <li>STATE: recompute the hash, show the state, wait until the view has applied it, then ACK
- *       with the hash this client computed. On a mismatch that hash differs from the server's, so
- *       the server sends the STATE again. Spectators and the final STATE are not ACKed.</li>
- *   <li>ROLL_REQUEST / DECISION_REQUEST for this colour: send ROLL / run the strategy and send
- *       DECISION (with Blue's memo). For other colours: only shown.</li>
- *   <li>PAUSED, RESUMED, GAME_OVER: shown.</li>
- *   <li>NEW_GAME: the screen is reset for the next game. A GAME_OVER that announces a next game
- *       does not stop the controller; only the session's last GAME_OVER does.</li>
- * </ul>
- */
 public final class ClientController implements EventStreamListener.Callback {
 
-    /** How long to wait for the screen to show a STATE before giving up on that ACK. */
+    /**
+     * How long to wait for the screen to show a STATE before giving up on that ACK.
+     */
     static final long VIEW_TIMEOUT_MS = 5_000;
 
     private final ServerGateway gateway;
@@ -92,11 +75,6 @@ public final class ClientController implements EventStreamListener.Callback {
         decisionWorker.shutdownNow();
     }
 
-    /**
-     * JOIN with this colour's Rule 7 behaviour, taken from its strategy (Blue declares false).
-     * 409 means the colour has already joined: most likely this client was restarted, so it carries
-     * on as that colour and the server resynchronises it through the event stream.
-     */
     public CompletableFuture<Void> join() {
         if (me.isSpectator())
             return CompletableFuture.completedFuture(null);
@@ -105,18 +83,14 @@ public final class ClientController implements EventStreamListener.Callback {
             if (error != null)
                 view.showWarning("JOIN failed: " + error.getMessage());
             else if (reply.status() == 409)
-                view.showWarning(me.colour().display() + " has already joined this game; continuing as a reconnecting client");
+                view.showWarning(
+                        me.colour().display() + " has already joined this game; continuing as a reconnecting client");
             else if (!reply.isSuccess())
                 view.showWarning("JOIN refused: " + reply.error());
             return null;
         });
     }
 
-    /**
-     * Used by the headless client: waits until the session is over, i.e. a GAME_OVER without a next
-     * game has been handled, or the event stream has closed for good. A GAME_OVER that announces a
-     * next game does not count: the player stays for the next game.
-     */
     public boolean awaitGameOver(long timeoutMs) throws InterruptedException {
         return gameOver.await(timeoutMs, TimeUnit.MILLISECONDS);
     }
@@ -163,7 +137,8 @@ public final class ClientController implements EventStreamListener.Callback {
         } else if (event instanceof RollRequest request) {
             view.showRequest(request);
             if (me.plays(request.colour()))
-                send("ROLL", gateway.roll(gameId, new RollCommand(me.colour(), request.turnId(), request.version(), newId())));
+                send("ROLL", gateway.roll(gameId,
+                        new RollCommand(me.colour(), request.turnId(), request.version(), newId())));
         } else if (event instanceof DecisionRequest question) {
             view.showRequest(question);
             if (me.plays(question.colour()))
@@ -198,7 +173,8 @@ public final class ClientController implements EventStreamListener.Callback {
         // Only now is the state on screen, so only now may this player acknowledge it.
         if (me.isSpectator() || state.snapshot().status() != GameStatus.IN_PROGRESS)
             return; // spectators never ACK; the final STATE needs no ACK
-        send("ACK v" + state.version(), gateway.ack(gameId, new AckCommand(me.colour(), state.version(), myHash, newId())));
+        send("ACK v" + state.version(),
+                gateway.ack(gameId, new AckCommand(me.colour(), state.version(), myHash, newId())));
     }
 
     /** Runs on the decision-worker thread. */
@@ -210,7 +186,6 @@ public final class ClientController implements EventStreamListener.Callback {
         }
     }
 
-    /** This colour's strategy answers the question, from the snapshot in the request only. */
     DecisionReply decide(DecisionRequest question) {
         PlayerColor colour = me.colour();
         if (question.kind() == DecisionKind.MOVE_FROM_BASE) {
