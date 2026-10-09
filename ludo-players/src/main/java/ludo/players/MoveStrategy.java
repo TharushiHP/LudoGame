@@ -5,12 +5,7 @@ import ludo.shared.snapshot.GameSnapshot;
 
 import java.util.List;
 
-/**
- * A player's behaviour (Strategy pattern): which piece to move for a roll, and whether to bring a
- * piece out of base on a six. Strategies decide from a {@link GameSnapshot} only, never from live
- * game objects, so the same code can run on a client machine. New behaviours can be added without
- * changing existing ones (Open/Closed).
- */
+
 public interface MoveStrategy {
 
     /**

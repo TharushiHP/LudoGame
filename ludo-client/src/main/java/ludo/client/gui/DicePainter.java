@@ -15,9 +15,7 @@ final class DicePainter {
 
     private DicePainter() {}
 
-    /**
-     * @param angle a small tilt in radians while the dice tumbles (0 when it has landed)
-     */
+    
     static void paint(Graphics2D g, double x, double y, double size, int value, double angle) {
         AffineTransform saved = g.getTransform();
         g.rotate(angle, x + size / 2, y + size / 2);

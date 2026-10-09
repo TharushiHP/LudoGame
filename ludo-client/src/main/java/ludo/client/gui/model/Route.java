@@ -10,13 +10,7 @@ import ludo.shared.snapshot.PieceSnapshot;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * How a token gets from its old place to its new one on screen (Value Object), and
- * {@link #plan} which works it out with the game's own {@link PathMath}. The GUI only animates
- * along it; the new place itself always comes from the server's snapshot.
- *
- * @param places every place passed, the old place first and the new place last
- */
+
 public record Route(Kind kind, List<Place> places) {
 
     /** How the move is shown. */

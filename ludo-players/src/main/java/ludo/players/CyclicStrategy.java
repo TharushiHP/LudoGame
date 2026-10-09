@@ -12,27 +12,7 @@ import java.util.stream.Collectors;
 
 import static ludo.players.SnapshotQueries.*;
 
-/**
- * Blue's behaviour: moves its pieces in turn (B1, B2, B3, B4, B1, ...), aiming for the mystery
- * cell when moving counterclockwise and avoiding it when moving clockwise. A piece without a
- * capture that can capture always goes first. A {@link MoveStrategy} (Strategy pattern).
- * <p>
- * The strategy itself is stateless. Its cycle position travels as the decider memo: it is read
- * from {@link GameSnapshot#deciderMemo()} (0 when absent) and the next position is returned with
- * the choice, so the server keeps it and a reconnecting client resumes exactly where it was.
- * <p>
- * Two cases where the cycle's next piece is not a normal move:
- * <ul>
- *   <li>The next piece is Home (or still at base): it is skipped, and the next piece in
- *       cycle order that is on the board is chosen instead, so finished pieces do not
- *       waste Blue's turns. The cycle then continues after the chosen piece.</li>
- *   <li>The next piece is on the board but cannot move (exact roll needed for Home,
- *       blocked, or in briefing): it is still chosen and Blue's turn is skipped. Blue
- *       sticks to its cycle rather than switching to another piece. This is the one
- *       exception to the Rule 7 fallback ({@link #triesOtherPiecesWhenBlocked()} is false);
- *       a blocked piece may still move up to the cell before the block (T-3).</li>
- * </ul>
- */
+
 public class CyclicStrategy implements MoveStrategy {
 
     private final PlayerColor color;

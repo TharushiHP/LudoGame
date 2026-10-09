@@ -10,10 +10,7 @@ import ludo.shared.snapshot.PieceSnapshot;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * The hover texts of the board (pure, unit-tested): what a token is doing and what a cell means.
- * Special cells come from {@link BoardConstants} and {@link PathMath}, never typed in here.
- */
+
 public final class TokenText {
 
     private TokenText() {}

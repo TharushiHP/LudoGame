@@ -7,11 +7,7 @@ import ludo.shared.snapshot.PieceSnapshot;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * A token that stands somewhere else in the new snapshot than in the old one (Value Object), and
- * {@link #between} which finds them all. Only the place counts: a new effect or direction alone
- * is not a move.
- */
+
 public record PieceChange(PieceSnapshot before, PieceSnapshot after) {
 
     public PlayerColor colour() {

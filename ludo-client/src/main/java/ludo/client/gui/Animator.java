@@ -10,18 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Where a moving token is drawn at a given moment, while the screen catches up with a state that
- * is <b>already applied</b>. The window sets the new snapshot first and only then asks the
- * animator to show how the tokens got there, so an animation can never hold back what the
- * client has applied (and so never delays an ACK).
- * <p>
- * Animations run only in the spectator window, which never ACKs. A player window (a player
- * client started without --headless) calls {@link #snap()} only, so every state is drawn at once.
- * When a new state arrives mid-animation the old one is snapped to its end and the new moves
- * start from there. Times are passed in, so nothing here starts a thread: the window's
- * {@code javax.swing.Timer} repaints on the Event Dispatch Thread and asks for poses.
- */
+
 final class Animator {
 
     /** Longest time per walked cell; long walks go faster so a move fits the 500 ms pacing. */

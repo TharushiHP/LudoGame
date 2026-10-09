@@ -8,16 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Where every part of the LUDO-T board sits on the 15x15 grid of Figure 1 in the brief (rows and
- * columns 0-14 from the top-left). Pure geometry with no Swing, so it is unit-tested on its own.
- * <p>
- * The board has four identical quarters. Yellow's quarter (path cells 0-12) is listed exactly as
- * in Figure 1; each next colour clockwise (Blue, Red, Green) gets the same quarter turned 90°
- * clockwise. So cell n + 13 is cell n turned a quarter, and the same holds for the home straights
- * and bases. Which cell is a start (X), an approach cell, Alpha, Beta or Gamma is never written
- * here: those numbers come from {@link BoardConstants} and {@link PathMath}, the game's own rules.
- */
+
 public final class BoardLayout {
 
     public static final int SIZE = 15;

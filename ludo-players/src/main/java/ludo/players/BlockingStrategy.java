@@ -11,11 +11,7 @@ import java.util.Optional;
 
 import static ludo.players.SnapshotQueries.*;
 
-/**
- * Green's behaviour: first get a capture for a piece that has none, then form a block, then move
- * a block piece closest to home, otherwise the piece closest to home. Brings a new piece out on a
- * six unless the six would form a block. A {@link MoveStrategy} (Strategy pattern).
- */
+
 public class BlockingStrategy implements MoveStrategy {
 
     private static final int SIX = 6;

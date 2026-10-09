@@ -8,11 +8,7 @@ import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Who plays each colour: the JOIN each client sent (with its declared Rule 7 behaviour) and which
- * colours the server has taken over after a client stayed away too long. Used only by the game
- * thread (thread confinement), so plain EnumMap/EnumSet are enough.
- */
+
 final class PlayerSeats {
 
     private final Map<PlayerColor, JoinRequest> joined = new EnumMap<>(PlayerColor.class);

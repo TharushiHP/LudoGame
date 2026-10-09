@@ -7,10 +7,7 @@ import java.util.concurrent.CompletableFuture;
 
 sealed interface Command {
 
-    /**
-     * A client request; the game thread completes {@code reply} once it has handled
-     * it.
-     */
+    
     record Request(ClientRequest request, CompletableFuture<Reply> reply) implements Command {
     }
 

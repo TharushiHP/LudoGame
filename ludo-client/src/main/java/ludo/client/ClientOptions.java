@@ -3,13 +3,7 @@ package ludo.client;
 import ludo.client.control.Identity;
 import ludo.shared.PlayerColor;
 
-/**
- * The client's command-line options (Value Object):
- * {@code --server=URL --game=ID --colour=RED|GREEN|YELLOW|BLUE|SPECTATOR --name=TEXT --headless}.
- * All are optional; without --game and --colour the connect window opens.
- *
- * @param identity null when no --colour was given
- */
+
 public record ClientOptions(String server, String gameId, Identity identity, boolean headless) {
 
     public static final String DEFAULT_SERVER = "http://localhost:8080";

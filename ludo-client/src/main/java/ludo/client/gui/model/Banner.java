@@ -11,14 +11,7 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * A short pop-up message over the board for an important moment (Value Object), and
- * {@link #fromLog} which finds those moments in a STATE's log lines. The lines are the game's own
- * console messages, so the banners say exactly what the server did; the GUI never works out a
- * rule itself. Ordinary moves and rolls give no banner.
- *
- * @param colour the player the banner is about (its colour tints the banner)
- */
+
 public record Banner(Kind kind, String text, PlayerColor colour) {
 
     public enum Kind { CAPTURE, MYSTERY, EFFECT, BLOCK, HOME, FINISH }

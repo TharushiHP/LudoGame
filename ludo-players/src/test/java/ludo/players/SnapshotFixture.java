@@ -15,10 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Test helper that builds a {@link GameSnapshot} position by position (Test Data Builder).
- * Every piece starts at base, clockwise, with no captures; tests only describe what differs.
- */
+
 final class SnapshotFixture {
 
     private static final List<PlayerColor> SNAPSHOT_ORDER =

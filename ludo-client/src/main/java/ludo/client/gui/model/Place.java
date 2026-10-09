@@ -3,11 +3,7 @@ package ludo.client.gui.model;
 import ludo.shared.PieceLocation;
 import ludo.shared.snapshot.PieceSnapshot;
 
-/**
- * One place a token can stand on (Value Object): a main-path cell, a square of its own home
- * straight, Home, or its slot in the base. {@code position} is the cell (0-51) or home-straight
- * index (0-4), and -1 for Home and base.
- */
+
 public record Place(PieceLocation location, int position) {
 
     public static Place of(PieceSnapshot piece) {

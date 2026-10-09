@@ -7,13 +7,7 @@ import ludo.players.SnapshotStrategyDecider;
 
 import java.util.Random;
 
-/**
- * Console entry point and composition root (formerly A1's Main): creates the console listener and
- * the snapshot strategies (ludo-players), wires them into the
- * game through the GameBuilder (Dependency Injection) and runs one simulation.
- * Optional argument {@code --seed=<number>} replays a game exactly; without it a random
- * seed is chosen and printed so the game can still be replayed.
- */
+
 public class ConsoleSimulation {
 
     private static final String SEED_PREFIX = "--seed=";

@@ -14,10 +14,7 @@ import static ludo.shared.PlayerColor.RED;
 import static ludo.shared.PlayerColor.YELLOW;
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * The four behaviours, each decided from a {@link GameSnapshot} only. Same scenarios as the A1
- * StrategyTest, rebuilt as snapshots, plus the decider memo (Blue's cycle position).
- */
+
 class StrategyTest {
 
     private static final List<Integer> ALL_PIECES = List.of(1, 2, 3, 4);

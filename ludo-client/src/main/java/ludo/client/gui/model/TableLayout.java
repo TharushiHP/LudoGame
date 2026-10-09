@@ -6,14 +6,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Where the board and the four player boxes go in a window of a given size (pure geometry, no
- * Swing, unit-tested). The board is the largest square that fits once the player boxes have room
- * outside its corners: beside the board when the window is wide, above and below it when the
- * window is tall. Whichever gives the larger board wins. Each box sits next to its own base:
- * Green top-left, Yellow top-right, Red bottom-left, Blue bottom-right (Figure 1). A small round
- * "i" button for the symbol legend goes in a free spot round them ({@link #info()}).
- */
+
 public final class TableLayout {
 
     /** Player box size as a fraction of the board side. */

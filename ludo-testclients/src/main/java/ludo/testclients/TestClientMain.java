@@ -11,13 +11,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 
-/**
- * Entry point of the test clients (the runnable jar's main class). Runs the chosen scenarios one
- * after another against any coordinator server ({@code --server=URL}, so the clients can run on
- * other PCs), prints each summary and saves it under {@code --out-dir}. The exit code is 0 only if
- * every check passed. Every thread the test clients start is a daemon: only this main thread keeps
- * the JVM alive, and it always finishes after {@code --timeout}.
- */
+
 public final class TestClientMain {
 
     private TestClientMain() {}

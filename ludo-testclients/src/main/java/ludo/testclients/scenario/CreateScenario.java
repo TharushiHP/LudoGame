@@ -23,12 +23,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-/**
- * K clients each create M games at the same time ({@code POST /games}, all asynchronous, released
- * together by a start latch). Many HTTP threads then call the server's registry at once; every
- * game must still get its own id (the registry's AtomicLong and ConcurrentHashMap).
- * The new games wait for players until the server stops; that is expected.
- */
+
 public final class CreateScenario implements Scenario {
 
     @Override

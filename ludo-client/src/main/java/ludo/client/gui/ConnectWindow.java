@@ -41,13 +41,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-/**
- * First window when the client starts without --game, styled like the game: pick the server and
- * a game (or create one), then one of two clear choices: <b>Watch game</b> (spectator) or
- * <b>Play as Red / Green / Yellow / Blue</b> (only colours still free in a game that has not
- * started). Network calls run asynchronously through the {@link ServerGateway}; their results
- * come back to the Event Dispatch Thread with {@code invokeLater}, so the window never freezes.
- */
+
 public final class ConnectWindow extends JFrame {
 
     /** What the user chose. {@code identity} has no colour for a spectator. */

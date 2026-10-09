@@ -8,15 +8,7 @@ import ludo.client.gui.SwingGameView;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
-/**
- * Entry point of the thick client (runnable jar ludo-client.jar).
- * <ul>
- *   <li>No arguments: the connect window (pick server, game and colour).</li>
- *   <li>{@code --game=ID --colour=X}: straight into the game window.</li>
- *   <li>{@code --headless}: no GUI, the log is printed to the console (reused by the test clients).</li>
- * </ul>
- * The game is a simulation: the client's strategy plays, the window only shows what happens.
- */
+
 public final class ClientMain {
 
     private ClientMain() {}

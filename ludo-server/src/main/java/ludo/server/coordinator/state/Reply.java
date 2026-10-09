@@ -3,10 +3,7 @@ package ludo.server.coordinator.state;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * The game thread's answer to one request: an HTTP status and a JSON body (Value Object).
- * Error replies carry {@code {"error": reason}} so a client, a test or Postman sees why.
- */
+
 public record Reply(int status, Map<String, Object> body) {
 
     public Reply {

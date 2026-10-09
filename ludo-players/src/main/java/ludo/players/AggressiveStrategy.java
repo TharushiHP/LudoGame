@@ -13,11 +13,7 @@ import java.util.stream.Collectors;
 
 import static ludo.players.SnapshotQueries.*;
 
-/**
- * Red's behaviour: capture whenever possible (the capturing piece closest to its approach wins),
- * otherwise move a piece that is not part of a block. Brings a new piece out on a six only when
- * the six cannot be used to capture. A {@link MoveStrategy} (Strategy pattern).
- */
+
 public class AggressiveStrategy implements MoveStrategy {
 
     private final PlayerColor color;

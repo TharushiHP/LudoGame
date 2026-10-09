@@ -21,19 +21,7 @@ import java.awt.geom.Path2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.geom.RoundRectangle2D;
 
-/**
- * Draws the board of Figure 1 in the brief with Java2D, scaled to any size: four bases (a white
- * diamond, a dashed inner diamond and a cross whose four arms hold the waiting tokens, with "Base"
- * in the outer corner), white path cells with thin black lines, each colour's X cell and approach
- * circle, coloured home straights, Home as four triangles with "Home" facing outwards, and a thick
- * outer border. The LUDO-T additions are kept small so the board still reads as Figure 1: α β γ in
- * the corner of the Alpha, Beta and Gamma cells and a soft purple glow on the mystery cell.
- * <p>
- * Which cell is an X, an approach, Alpha, Beta or Gamma comes from {@link PathMath} and
- * {@link BoardConstants}, and where it is from {@link BoardLayout}: nothing is placed by hand here.
- * The static board is drawn once per size into an image by the caller; only the mystery cell is
- * drawn every frame ({@link #paintMystery}).
- */
+
 final class BoardPainter {
 
     private final BoardLayout layout;

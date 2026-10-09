@@ -4,23 +4,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * The test clients' settings (Value Object, Java record), parsed from {@code --name=value} options.
- *
- * @param server      the coordinator server's URL; any PC on the network
- * @param scenario    play, burst, create or all (the three one after another)
- * @param games       play: games run at the same time (four clients each)
- * @param clients     burst: test clients firing at one game (1 to 4, one seat each);
- *                    create: clients creating games at the same time
- * @param requests    burst: requests each burst client sends
- * @param waveSize    burst: requests launched together in one wave
- * @param creates     create: POST /games each client sends
- * @param turnDelayMs turn delay of the games the scenarios create (0 = as fast as possible)
- * @param seed        seed of the first game; play uses seed, seed + 1, ...
- * @param timeoutMs   how long a scenario may take before it gives up
- * @param outDir      where the summary files are written
- * @param watchJar    burst: path of ludo-client.jar; if set, a spectator window opens on the burst game
- */
+
 public record TestClientOptions(String server, String scenario, int games, int clients, int requests, int waveSize,
                                 int creates, long turnDelayMs, long seed, long timeoutMs, Path outDir, String watchJar) {
 

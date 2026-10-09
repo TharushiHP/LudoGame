@@ -11,11 +11,7 @@ import java.util.Optional;
 
 import static ludo.players.SnapshotQueries.*;
 
-/**
- * Yellow's behaviour (speedrunner): get a capture for a piece that has none if it is in range,
- * otherwise move the piece closest to home. Always brings a new piece out on a six.
- * A {@link MoveStrategy} (Strategy pattern).
- */
+
 public class WinningStrategy implements MoveStrategy {
 
     private final PlayerColor color;

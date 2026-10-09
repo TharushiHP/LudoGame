@@ -30,14 +30,7 @@ import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-/**
- * Two or more test clients fire bursts of asynchronous requests at ONE running game while four
- * automatic players play it. Each burst client launches a whole wave before any reply arrives, and
- * all burst clients fire at the same moment (see {@link BurstClient}). The server must queue what it
- * cannot handle at once and still answer every request correctly: one accepted ROLL per turn at
- * most, the stored reply for a repeated requestId, 409 for stale requests, and a game that stays
- * consistent for every client.
- */
+
 public final class BurstScenario implements Scenario {
 
     private static final long WATCH_DELAY_MS = 4_000;

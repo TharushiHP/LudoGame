@@ -11,11 +11,7 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * All games on this server, by id. A ConcurrentHashMap, because many HTTP threads look games up
- * at the same time while others create new ones. Ids come from an AtomicLong, so two
- * simultaneous POST /games never get the same id.
- */
+
 public final class SessionRegistry {
 
     private final ConcurrentHashMap<String, GameSession> sessions = new ConcurrentHashMap<>();

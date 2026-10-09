@@ -2,14 +2,7 @@ package ludo.client.gui.model;
 
 import ludo.client.gui.model.TableLayout.Rect;
 
-/**
- * Where the winner box and its close button go (pure geometry, no Swing, unit-tested). The box is
- * centred over the board: a short one for a first-winner ending ("Red wins!"), a taller one that
- * lists the places for every other ending. The round close button sits inside its top-right corner.
- *
- * @param box   the box itself
- * @param close the bounding square of the round close button
- */
+
 public record WinnerBox(Rect box, Rect close) {
 
     /** Box sizes as fractions of the board side. */

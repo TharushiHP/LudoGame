@@ -9,10 +9,7 @@ import ludo.shared.snapshot.PieceSnapshot;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Small read-only questions about a {@link GameSnapshot} that several strategies ask
- * (DRY helper; pure functions, no state).
- */
+
 final class SnapshotQueries {
 
     private SnapshotQueries() {}

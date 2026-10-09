@@ -28,23 +28,7 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
-/**
- * The one game window, like a real Ludo app: the Figure 1 board, a player box with a dice at
- * each corner, glossy animated tokens, banners, toasts and a closable winner box ({@link TablePanel}),
- * with a hidden developer overlay on F2 ({@link DevOverlay}). The round "i" button opens the
- * symbol legend ({@link LegendOverlay}); a click or Esc closes it. Esc also closes the winner box.
- * <p>
- * <b>Spectator or player.</b> The demo opens this window as a <b>spectator</b>: it never ACKs,
- * so it can animate (tokens walk, the dice tumbles) without slowing the game down. The four
- * players run as separate headless clients. A player started <b>with</b> a window (e.g. on another
- * laptop) gets the same window with "YOU" on its own box, but every state is drawn at once, with
- * no walk and no tumble: its ACK means "this state is on my screen", so nothing may lag behind.
- * In both cases {@link #applyState} applies the state immediately; animation only ever catches up.
- * <p>
- * Sized to the usable screen area (logical pixels, so Windows display scaling is respected): the
- * spectator opens maximised, a player at 90 % of the screen. Closing disposes the window and stops
- * its timer; the client's other threads are daemons, so the JVM then ends (see docs/THREADS.md).
- */
+
 public final class GameWindow extends JFrame {
 
     private static final int FRAME_MS = 33;

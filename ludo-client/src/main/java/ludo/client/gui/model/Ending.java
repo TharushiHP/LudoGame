@@ -4,15 +4,7 @@ import ludo.shared.PlayerColor;
 import ludo.shared.protocol.GameOverEvent;
 import ludo.shared.snapshot.GameStatus;
 
-/**
- * Which winner screen a GAME_OVER gets (pure, unit-tested Value Object). A game that FINISHED
- * with exactly one colour placed ended at the first winner (Rule 11, FIRST_WINNER): the screen
- * shows only that winner. Every other ending (all places decided, stalemate, round cap, aborted)
- * gets the podium.
- *
- * @param kind   FIRST_WINNER or PODIUM
- * @param winner the winner for FIRST_WINNER, null for PODIUM
- */
+
 public record Ending(Kind kind, PlayerColor winner) {
 
     public enum Kind { FIRST_WINNER, PODIUM }

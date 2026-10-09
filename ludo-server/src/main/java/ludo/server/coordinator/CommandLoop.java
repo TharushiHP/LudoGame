@@ -54,14 +54,7 @@ final class CommandLoop {
         statePublisher.accept(next.name());
     }
 
-    /**
-     * Handles commands until {@code done} is true (returns true) or the deadline
-     * passes (returns
-     * false). It polls in short slices so {@code done} is re-checked regularly even
-     * when no
-     * command arrives, e.g. to notice a client that has disconnected. It never
-     * sleeps.
-     */
+    
     boolean awaitUntil(BooleanSupplier done, long deadlineNanos) throws InterruptedException {
         while (!done.getAsBoolean()) {
             long remaining = deadlineNanos - System.nanoTime();
