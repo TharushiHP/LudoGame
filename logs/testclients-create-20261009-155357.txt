@@ -1,0 +1,17 @@
+LUDO-T test clients: create
+Server   http://localhost:8090   started 2026-10-09 15:53:57   duration 6.4 s
+Options  clients=4 creates=25
+
+Requests: creating clients (4 HttpClients)
+type       sent attempts    2xx    409  503(1st)  retries  final503  other   min ms   avg ms   p95 ms   max ms
+create      100      600      0      0         0      500         0    100   6123.0   6158.9   6175.9   6186.2
+total       100      600      0      0         0      500         0    100   6123.0   6158.9   6175.9   6186.2
+
+Notes
+  ids none
+
+Checks
+FAIL  every POST /games answered 201 (0/100, 100 failed)
+FAIL  every game id is unique (0 distinct ids)
+
+Result: FAIL

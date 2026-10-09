@@ -1,0 +1,14 @@
+LUDO-T test clients: play
+Server   http://localhost:8090   started 2026-10-09 15:53:50   duration 6.1 s
+Options  games=4 clients-per-game=4 turn-delay=0 seed=11
+
+Requests: players (16 clients)
+type       sent attempts    2xx    409  503(1st)  retries  final503  other   min ms   avg ms   p95 ms   max ms
+create        4       24      0      0         0       20         0      4   5836.8   5840.5   5850.6   5850.6
+total         4       24      0      0         0       20         0      4   5836.8   5840.5   5850.6   5850.6
+
+Checks
+FAIL  all 4 games created (201) (0 created, last problem: java.util.concurrent.ExecutionException: java.net.ConnectException)
+FAIL  no lost request and no server error (4 unexpected, 0 still 503 after all retries)
+
+Result: FAIL
